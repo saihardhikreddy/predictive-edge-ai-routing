@@ -16,6 +16,10 @@ The app opens on a 3D map of the mesh: your phone is the amber lantern, and ever
 2. Do the same on the other phones. Within a few seconds each phone shows the others in the 3D map and under **Phones nearby** in the **Mesh** chapter.
 3. Keep the app open with the screen on (the app keeps it awake). Android throttles BLE scanning in the background.
 
+### Names and phones out of range
+
+The first time the app opens it asks for your name. Each phone announces its name to the whole mesh every 30 s (relayed up to 7 hops). A phone you can't reach directly therefore still appears in **Send** under **Through the mesh**, with its hop count, usually within 30 s of it starting. Pick it like any other phone and the message is relayed to it. Tap your name at the top to change it.
+
 ## 3. Make a multi-hop chain in one room
 
 BLE reaches across a whole room, so every phone hears every other phone. Force a chain A – B – C – D:
