@@ -55,7 +55,10 @@ jobs:
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk MeshTestbed.apk
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest MeshTestbed.apk \
+          sleep 5  # let the old tag deletion settle, or GitHub may create the new release as a draft
+          gh release create latest MeshTestbed.apk --target "${{ github.sha }}" \
             --title "Mesh Testbed build ${{ github.run_number }}" \
             --notes "Built from ${{ github.sha }}. On each phone: open this page, download MeshTestbed.apk, allow installs from your browser, install." \
             --prerelease
+          gh release edit latest --draft=false
+          gh release view latest --json isDraft,assets --jq '{draft: .isDraft, assets: [.assets[].name]}'
