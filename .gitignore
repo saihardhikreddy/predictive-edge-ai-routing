@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+.gradle/
+build/
+local.properties
+.kotlin/
+*.apk
