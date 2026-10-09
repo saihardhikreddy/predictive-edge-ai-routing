@@ -25,7 +25,11 @@ fun UiState.toJson(): String {
             })
         }
     })
-    o.put("known", JSONArray().apply { known.forEach { (id, name) -> put(JSONArray().put(id).put(name)) } })
+    o.put("nickSet", nickSet)
+    // [id, name, hops (1 = in direct range, 0 = unknown), heardAgoS (-1 = never), present]
+    o.put("known", JSONArray().apply {
+        known.forEach { k -> put(JSONArray().put(k.id).put(k.name).put(k.hops).put(k.heardAgoS).put(k.present)) }
+    })
     o.put("messages", JSONArray().apply {
         messages.forEach { m ->
             put(JSONObject().apply {

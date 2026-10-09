@@ -40,6 +40,7 @@ class MeshEngine(private val context: Context) {
         prefs.edit().putString("id", it).apply()
     }
     private var nick: String = prefs.getString("nick", null) ?: "Phone-${myId.take(4)}"
+    private var nickSet: Boolean = prefs.contains("nick")
 
     private val log = EventLog(context, myId)
     private val fxEvents = ArrayDeque<FxEvent>()
@@ -85,7 +86,17 @@ class MeshEngine(private val context: Context) {
     private class Ctrl(val to: String, val frame: Frame, var tries: Int = 0, var nextTry: Long = 0, var inFlight: Boolean = false)
 
     private val neighbors = HashMap<String, Neighbor>()
+    /** id -> profile name ("" until the name has reached us). */
     private val known = LinkedHashMap<String, String>()
+
+    /** Best route learned from name announcements: [hops] away, first hop [via]. */
+    private class Route(var hops: Int, var via: String, var heardAt: Long)
+    private val routes = HashMap<String, Route>()
+
+    /** neighbour -> (destination -> hops from that neighbour, when heard). Feeds the router as a P(dest) prior. */
+    private val annHops = HashMap<String, HashMap<String, Pair<Int, Long>>>()
+    private var annSeq = 0
+    private var lastAnnounce = 0L
     private val store = ArrayList<Stored>()
     private val pendingTd = HashMap<String, Pair<DoubleArray, Int>>()
     private val watches = HashMap<String, Pair<String, Long>>()
@@ -140,6 +151,7 @@ class MeshEngine(private val context: Context) {
         lastAdvertBytes = Protocol.advertPayload(myId, battery(), bufferPct())
         transport.start(lastAdvertBytes!!)
         lastAdvert = now()
+        lastAnnounce = now() - 27_000 // first announcement ~3 s after start, once neighbours are found
         log.write("START", mode = mode, value = "nick=$nick")
         handler.post(tick)
         publish()
@@ -160,8 +172,13 @@ class MeshEngine(private val context: Context) {
     fun setTriage(on: Boolean) = handler.post { triageOn = on; publish() }
     fun setRange(dbm: Int) = handler.post { rangeDbm = dbm; log.write("RANGE", value = dbm.toString()); publish() }
     fun setNick(n: String) = handler.post {
-        nick = n.take(16).ifBlank { "Phone-${myId.take(4)}" }
+        val clean = n.trim().take(24)
+        if (clean.isEmpty()) return@post
+        nick = clean
+        nickSet = true
         prefs.edit().putString("nick", nick).apply()
+        log.write("NICK", value = nick)
+        lastAnnounce = 0L // tell the mesh the new name on the next tick
         publish()
     }
 
@@ -217,6 +234,7 @@ class MeshEngine(private val context: Context) {
             processWatches(t)
             processExperiment(t)
             if (t - lastAdvert > 10_000) refreshAdvert(t)
+            if (t - lastAnnounce > 30_000) announce(t)
             publish()
             handler.postDelayed(this, 500)
         }
@@ -245,7 +263,7 @@ class MeshEngine(private val context: Context) {
         n.lastSeen = t
         n.battery = adv.battery
         n.buffer = adv.buffer
-        known.putIfAbsent(adv.nodeId, n.nick.ifBlank { adv.nodeId })
+        known.putIfAbsent(adv.nodeId, n.nick)
         val r = inRange(n, t)
         if (r && !n.wasInRange) {
             n.wasInRange = true
@@ -283,8 +301,56 @@ class MeshEngine(private val context: Context) {
 
     private fun neighborInfos(exclude: Set<String>): List<MarlRouter.NeighborInfo> =
         neighbors.values.filter { inRange(it) && it.id !in exclude && it.id !in router.quarantined }.map {
-            MarlRouter.NeighborInfo(it.id, it.rssi.toInt(), it.battery.toDouble(), it.buffer.toDouble(), it.p)
+            MarlRouter.NeighborInfo(it.id, it.rssi.toInt(), it.battery.toDouble(), it.buffer.toDouble(), effectiveP(it))
         }
+
+    /**
+     * Neighbour's delivery predictability per destination: its PRoPHET vector (from HELLO),
+     * raised by fresh announcements ("this neighbour is h hops from d" -> 0.85^h). This is what
+     * lets the router head towards a phone nobody has met directly yet.
+     */
+    private fun effectiveP(n: Neighbor): Map<String, Double> {
+        val ann = annHops[n.id] ?: return n.p
+        val t = now()
+        val out = HashMap(n.p)
+        for ((d, hv) in ann) {
+            if (t - hv.second > 120_000) continue
+            val est = Math.pow(0.85, hv.first.toDouble())
+            if (est > (out[d] ?: 0.0)) out[d] = est
+        }
+        return out
+    }
+
+    // ------------------------------------------------------------ names
+
+    fun nameOf(id: String): String = known[id]?.takeIf { it.isNotBlank() } ?: "Unknown phone ${id.take(4)}"
+
+    /** Flood "I exist, my name is …" (TTL 7). */
+    private fun announce(t: Long) {
+        lastAnnounce = t
+        annSeq++
+        seen.add("N:$myId:$annSeq")
+        val f = Frame.Announce(myId, nick, annSeq, 0, Protocol.FLOOD_TTL, myId)
+        neighbors.values.filter { inRange(it, t) }.forEach { sendFrame(it.id, f) {} }
+    }
+
+    private fun onAnnounce(a: Frame.Announce) {
+        if (a.src == myId || !seen.add("N:${a.src}:${a.seq}")) return
+        val t = now()
+        if (a.nick.isNotBlank() && known[a.src] != a.nick) {
+            known[a.src] = a.nick
+            log.write("NAME", peer = a.src, value = a.nick)
+        } else known.putIfAbsent(a.src, "")
+        val h = a.hops + 1
+        val r = routes[a.src]
+        if (r == null || h <= r.hops || t - r.heardAt > 60_000) routes[a.src] = Route(h, a.from, t)
+        else if (r.via == a.from) r.heardAt = t
+        annHops.getOrPut(a.from) { HashMap() }[a.src] = a.hops to t
+        if (a.ttl > 1 && !sinkhole) {
+            val fwd = a.copy(hops = h, ttl = a.ttl - 1, from = myId)
+            neighbors.values.filter { inRange(it, t) && it.id != a.from && it.id != a.src }.forEach { sendFrame(it.id, fwd) {} }
+        }
+    }
 
     // ---------------------------------------------------------------- sending
 
@@ -299,6 +365,7 @@ class MeshEngine(private val context: Context) {
             is Frame.HopAck -> frame.msgId
             is Frame.FwdAck -> frame.msgId
             is Frame.DeliveryAck -> frame.msgId
+            is Frame.Announce -> ""
             else -> ""
         }
         transport.send(dev, bytes) { ok ->
@@ -320,10 +387,10 @@ class MeshEngine(private val context: Context) {
         val copies = if (mode == Protocol.MODE_MARL && sos) 2 else 1
         stats[mode]!!.originated++
         if (sos) stats[mode]!!.sosOriginated++
-        messages.add(ChatMsg(msgId, dst, known[dst] ?: dst, text, true, tri.intent, "sent", t, mode = mode,
+        messages.add(ChatMsg(msgId, dst, nameOf(dst), text, true, tri.intent, "sent", t, mode = mode,
             note = if (tri.wireBytes < tri.rawBytes) "${tri.rawBytes}→${tri.wireBytes} B" else ""))
         log.write("ORIG", mode = mode, msg = msgId, dst = dst, bytes = tri.wireBytes, value = "${tri.intent};raw=${tri.rawBytes}")
-        val base = Frame.Data(msgId, 0, myId, dst, t, emptyList(), tri.urgency, tri.intent, tri.wireText, mode, Protocol.FLOOD_TTL)
+        val base = Frame.Data(msgId, 0, myId, dst, t, emptyList(), tri.urgency, tri.intent, tri.wireText, mode, Protocol.FLOOD_TTL, nick)
         if (mode == Protocol.MODE_FLOOD) {
             seen.add(msgId)
             floodForward(base, null)
@@ -406,6 +473,7 @@ class MeshEngine(private val context: Context) {
         if (!running) return
         when (val f = Frame.decode(bytes)) {
             is Frame.Hello -> onHello(f)
+            is Frame.Announce -> onAnnounce(f)
             is Frame.Data -> onData(f, bytes.size)
             is Frame.HopAck -> onHopAck(f)
             is Frame.FwdAck -> onFwdAck(f)
@@ -416,9 +484,8 @@ class MeshEngine(private val context: Context) {
     }
 
     private fun onHello(h: Frame.Hello) {
-        known[h.src] = h.nick.ifBlank { h.src }
+        if (h.nick.isNotBlank()) known[h.src] = h.nick else known.putIfAbsent(h.src, "")
         neighbors[h.src]?.let { it.nick = h.nick; it.p = h.p }
-        h.p.keys.forEach { if (it != myId) known.putIfAbsent(it, it) }
         router.onEncounter(h.src, h.p)
         log.write("HELLO_RX", peer = h.src, value = "reply=${h.reply};model=${h.w != null}")
         if (!h.reply) sendHello(h.src, reply = true, includeModel = h.w != null)
@@ -433,7 +500,7 @@ class MeshEngine(private val context: Context) {
 
     private fun onData(d: Frame.Data, size: Int) {
         val sender = d.path.lastOrNull() ?: d.src
-        known.putIfAbsent(d.src, d.src)
+        if (d.srcName.isNotBlank()) known[d.src] = d.srcName else known.putIfAbsent(d.src, "")
         if (d.mode == Protocol.MODE_FLOOD) {
             if (!seen.add(d.msgId)) { log.write("DUP", mode = d.mode, msg = d.msgId, peer = sender); return }
             log.write("RX", mode = d.mode, msg = d.msgId, src = d.src, dst = d.dst, peer = sender, hops = d.path.size, bytes = size)
@@ -464,7 +531,7 @@ class MeshEngine(private val context: Context) {
         log.write("DELIVER", mode = d.mode, msg = d.msgId, src = d.src, dst = myId, hops = d.path.size,
             value = "copy=${d.copy};intent=${d.intent}")
         if (!deliveredHere.add(d.msgId)) return
-        messages.add(ChatMsg(d.msgId, d.src, known[d.src] ?: d.src, d.text, false, d.intent, "received", now(),
+        messages.add(ChatMsg(d.msgId, d.src, nameOf(d.src), d.text, false, d.intent, "received", now(),
             hops = d.path.size, mode = d.mode))
         val route = d.path + myId
         queueBack(Frame.DeliveryAck(d.msgId, myId, d.src, d.createdAt, route, d.path.size))
@@ -523,7 +590,7 @@ class MeshEngine(private val context: Context) {
         log.write("TRUST", peer = peer, value = "ok=$ok;anomaly=${String.format(Locale.US, "%.2f", router.anomalyScore(peer))}")
         if (flagged) {
             log.write("QUARANTINE", peer = peer, value = "reputation=${String.format(Locale.US, "%.2f", router.reputation(peer))}")
-            status = "Quarantined ${known[peer] ?: peer}"
+            status = "Quarantined ${nameOf(peer)}"
         }
     }
 
@@ -581,20 +648,31 @@ class MeshEngine(private val context: Context) {
             battery = battery(),
             neighbors = neighbors.values.sortedByDescending { it.rssi }.map {
                 UiNeighbor(
-                    id = it.id, nick = known[it.id] ?: it.nick, rssi = it.rssi.toInt(), battery = it.battery,
+                    id = it.id, nick = nameOf(it.id), rssi = it.rssi.toInt(), battery = it.battery,
                     present = inRange(it, t), seenAgoS = ((t - it.lastSeen) / 1000).toInt(),
                     linkQ = MarlRouter.packetSuccessProb(it.rssi.toInt()),
                     reputation = router.reputation(it.id), anomaly = router.anomalyScore(it.id),
                     quarantined = it.id in router.quarantined, blocked = it.id in blocked,
                 )
             },
-            known = known.filterKeys { it != myId }.toList(),
+            nickSet = nickSet,
+            known = (known.keys + routes.keys).filter { it != myId }.distinct().map { id ->
+                val nb = neighbors[id]
+                val present = nb != null && inRange(nb, t)
+                val r = routes[id]
+                val heard = maxOf(nb?.lastSeen ?: 0L, r?.heardAt ?: 0L)
+                KnownPhone(
+                    id = id, name = nameOf(id), present = present,
+                    hops = if (present) 1 else r?.hops ?: 0,
+                    heardAgoS = if (heard > 0) ((t - heard) / 1000).toInt() else -1,
+                )
+            }.sortedWith(compareBy({ !it.present }, { if (it.hops == 0) 99 else it.hops }, { it.name.lowercase() })),
             messages = messages.takeLast(100).map { it.copy() },
             stats = stats.mapValues { it.value.copy() },
             txFrames = txFrames, txFails = txFails, txBytes = txBytes,
             stored = store.size, queue = transport.queueSize,
             weights = router.w.toList(), samples = router.nSamples, flRounds = flRounds,
-            predictability = router.advertisedVector(6).toList().map { (k, v) -> (known[k] ?: k) to v },
+            predictability = router.advertisedVector(6).toList().map { (k, v) -> nameOf(k) to v },
             expRemaining = expRemaining, expTotal = expTotal,
             logTail = log.tail(150),
             events = synchronized(fxEvents) { fxEvents.toList() },
@@ -628,6 +706,9 @@ data class ChatMsg(
     val note: String = "",
 )
 
+/** A phone you can message: in direct range, or known through name announcements. */
+data class KnownPhone(val id: String, val name: String, val present: Boolean, val hops: Int, val heardAgoS: Int)
+
 data class UiNeighbor(
     val id: String,
     val nick: String,
@@ -653,7 +734,8 @@ data class UiState(
     val rangeDbm: Int = -100,
     val battery: Int = 100,
     val neighbors: List<UiNeighbor> = emptyList(),
-    val known: List<Pair<String, String>> = emptyList(),
+    val nickSet: Boolean = false,
+    val known: List<KnownPhone> = emptyList(),
     val messages: List<ChatMsg> = emptyList(),
     val stats: Map<String, ModeStats> = emptyMap(),
     val txFrames: Int = 0,
