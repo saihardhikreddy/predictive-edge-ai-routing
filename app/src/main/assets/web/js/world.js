@@ -312,7 +312,7 @@ export function createWorld(canvas, { onSelect, onFirstFrame, reducedMotion = fa
       node.targetAlpha = n.present && !n.blocked ? 1 : 0.28;
     }
     // phones known through the mesh but not heard directly
-    for (const [id, name] of s.known || []) {
+    for (const [id, name, hops] of s.known || []) {
       if (seen.has(id)) continue;
       seen.add(id);
       let node = nodes.get(id);
@@ -321,7 +321,7 @@ export function createWorld(canvas, { onSelect, onFirstFrame, reducedMotion = fa
         nodes.set(id, node);
       }
       node.kind = "far";
-      node.data = { id, nick: name, present: false };
+      node.data = { id, nick: name, present: false, hops };
       const t = placeTarget(id, -100, false, "far");
       node.targetAngle = t.a; node.targetRadius = t.r;
       node.targetAlpha = 0.45;
@@ -719,7 +719,7 @@ export function createWorld(canvas, { onSelect, onFirstFrame, reducedMotion = fa
       const el = tagFor(id);
       if (n.alpha < 0.08) { el.style.opacity = "0"; continue; }
       const d = n.data || {};
-      const sub = n.kind === "far" ? "via mesh" : d.quarantined ? "cut off" : d.present && !d.blocked ? `${d.rssi} dBm` : d.blocked ? "blocked" : "out of range";
+      const sub = n.kind === "far" ? (d.hops > 1 ? `${d.hops} hops away` : "via mesh") : d.quarantined ? "cut off" : d.present && !d.blocked ? `${d.rssi} dBm` : d.blocked ? "blocked" : "out of range";
       const cls = d.quarantined ? "bad" : n.kind === "far" || !d.present || d.blocked ? "away" : "";
       tmpV.set(n.pos.x, HEIGHT + 0.5, n.pos.z);
       placeTag(el, tmpV.clone(), `<b>${esc(d.nick || id)}</b><small>${esc(sub)}</small>`, cls, hideBelow);
