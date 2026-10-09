@@ -77,9 +77,23 @@ applySheet();
 /* ─── controls ─── */
 const call = (name, ...args) => engine.call(name, args);
 $("power").addEventListener("click", () => call(S?.running ? "stop" : "start"));
-$("pill").addEventListener("click", () => {
-  const n = prompt("Name this phone", S?.nick || "");
-  if (n != null) call("setNick", n);
+/* profile name: asked once on first launch, editable from the top pill */
+let nameAsked = false;
+function openName(required) {
+  $("nc-input").value = required ? "" : (S?.nick || "");
+  $("nc-cancel").hidden = required;
+  $("namecard").hidden = false;
+  setTimeout(() => $("nc-input").focus(), 50);
+}
+$("pill").addEventListener("click", () => openName(false));
+$("nc-cancel").addEventListener("click", () => ($("namecard").hidden = true));
+$("nc-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const n = $("nc-input").value.trim();
+  if (!n) return;
+  call("setNick", n);
+  $("namecard").hidden = true;
+  toast(`You will appear as ${n} on every phone in the mesh`);
 });
 document.querySelectorAll(".segmented button").forEach((b) => b.addEventListener("click", () => call("setMode", b.dataset.mode)));
 $("triage").addEventListener("change", (e) => call("setTriage", e.target.checked));
@@ -129,6 +143,7 @@ let S = null;
 let lastSeq = -1;
 function onState(s) {
   S = s;
+  if (!nameAsked && s.nickSet === false) { nameAsked = true; openName(true); }
   world?.setState(s);
   world?.handleEvents(s.events);
   for (const e of s.events || []) {
@@ -227,13 +242,23 @@ function render(force) {
   }
 
   // Send
+  // known = [id, name, hops (1 = in direct range, 0 = unknown), heardAgoS (-1 = never), present]
   const known = S.known || [];
   if (!dest && known.length) dest = known[0][0];
-  keyed("dest", known.map(([id, name]) => {
-    const n = ns.find((x) => x.id === id);
-    const tag = n?.present ? "" : "<small>via mesh</small>";
-    return { key: id, tag: "button", attrs: { class: "chip", type: "button", "data-id": id, "aria-pressed": String(id === dest) }, html: `${esc(name)}${tag}` };
-  }), `<p class="empty">No phones known yet. They appear here once they have been heard.</p>`);
+  const chip = ([id, name, hops, ago]) => {
+    const far = ago < 0 ? "" : ago < 60 ? `heard ${ago} s ago` : `heard ${Math.round(ago / 60)} min ago`;
+    const sub = hops > 1 ? `${hops} hops${far ? ", " + far : ""}` : far || "through the mesh";
+    return { key: id, tag: "button", attrs: { class: "chip", type: "button", "data-id": id, "aria-pressed": String(id === dest) },
+      html: `${esc(name)}${hops === 1 ? "" : `<small>${esc(sub)}</small>`}` };
+  };
+  const near = known.filter((k) => k[4]);
+  const far = known.filter((k) => !k[4]);
+  keyed("dest-near", near.map(chip), "");
+  keyed("dest-far", far.map(chip), "");
+  $("dest-near-label").hidden = !near.length;
+  $("dest-far-label").hidden = !far.length;
+  $("dest-empty").textContent = known.length ? (far.length ? "" : "Phones out of your range show up under Through the mesh once their name reaches you, usually within 30 s.")
+    : S.running ? "No phones yet. Names arrive within about 30 s of another phone starting the app." : "Start the mesh to find phones.";
   const msgs = (S.messages || []).slice().reverse();
   keyed("thread", msgs.map((m) => {
     const sos = m.intent === "EMERGENCY_SOS";
