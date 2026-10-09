@@ -10,7 +10,7 @@ export function createDemoEngine(emit) {
   let seq = 0;
   let t0 = Date.now();
   const s = {
-    myId: "F0E1D2C3", nick: "Hardhik", running: false, status: "Stopped", mode: "M", sinkhole: false, triageOn: true,
+    myId: "F0E1D2C3", nick: "Phone-F0E1", nickSet: false, running: false, status: "Stopped", mode: "M", sinkhole: false, triageOn: true,
     rangeDbm: -100, battery: 82, neighbors: [], known: [], messages: [],
     stats: { M: { originated: 0, confirmed: 0, rttSum: 0, hopSum: 0, sosOriginated: 0, sosConfirmed: 0 }, F: { originated: 0, confirmed: 0, rttSum: 0, hopSum: 0, sosOriginated: 0, sosConfirmed: 0 } },
     txFrames: 0, txFails: 0, txBytes: 0, stored: 0, queue: 0,
@@ -42,7 +42,12 @@ export function createDemoEngine(emit) {
           blocked: (s.blocked || []).includes(p.id),
         };
       });
-      s.known = NAMES.map(([id, nick]) => [id, nick]);
+      // [id, name, hops, heardAgoS, present]: the first four are in range, Canteen is 3 hops away
+      s.known = NAMES.map(([id, nick], i) => {
+        const nb = s.neighbors.find((n) => n.id === id);
+        const present = !!nb?.present;
+        return [id, nick, present ? 1 : 3, present ? 0 : 12 + (i * 7) % 20, present];
+      });
       s.predictability = s.neighbors.slice(0, 4).map((n, i) => [n.nick, +(0.8 - i * 0.17).toFixed(2)]);
       if (Math.random() < 0.08) { const p = phones[(Math.random() * phones.length) | 0]; ev("TX_OK", { peer: p.id, value: "Hello" }); }
       if (exp && exp.left > 0 && Date.now() >= exp.next) { exp.left--; exp.next = Date.now() + exp.iv; send(NAMES[(Math.random() * NAMES.length) | 0][0], Math.random() < exp.sos ? SOS[0] : ROUTINE[(Math.random() * 3) | 0]); }
@@ -94,7 +99,7 @@ export function createDemoEngine(emit) {
         case "setSinkhole": s.sinkhole = !!args[0]; break;
         case "setTriage": s.triageOn = !!args[0]; break;
         case "setRange": s.rangeDbm = +args[0]; break;
-        case "setNick": s.nick = String(args[0] || "").slice(0, 16) || s.nick; break;
+        case "setNick": s.nick = String(args[0] || "").trim().slice(0, 24) || s.nick; s.nickSet = true; break;
         case "toggleBlock": { s.blocked = s.blocked || []; const i = s.blocked.indexOf(args[0]); if (i >= 0) s.blocked.splice(i, 1); else s.blocked.push(args[0]); break; }
         case "send": send(args[0], args[1]); break;
         case "startExperiment": exp = { left: +args[0], iv: +args[1], sos: +args[2], next: Date.now() }; s.expTotal = +args[0]; break;
