@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cognitive Edge Mesh - Digital Twin Visualizer</title>
+    <style>
+        :root {
+            --bg-deep: #060B12;
+            --bg-card: #0A1420;
+            --bg-card-hover: #0F1D2F;
+            --border-glow: #1A3048;
+            --accent-cyan: #52D9C9;
+            --accent-blue: #38BDF8;
+            --accent-purple: #A78BFA;
+            --accent-coral: #FF6B5E;
+            --accent-amber: #FFB454;
+            --text-primary: #F0F6FC;
+            --text-secondary: #8B949E;
+            --text-muted: #484F58;
+            --font-mono: 'SF Mono', 'Fira Code', 'Roboto Mono', monospace;
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Top Header */
+        header {
+            background: linear-gradient(180deg, rgba(10, 20, 32, 0.98) 0%, rgba(6, 11, 18, 0.98) 100%);
+            border-bottom: 1px solid var(--border-glow);
+            padding: 8px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            z-index: 100;
+        }
+
+        .brand-section {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand-logo {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 12px rgba(82, 217, 201, 0.4);
+            font-weight: 900;
+            font-size: 14px;
+            color: #060B12;
+        }
+
+        .brand-title {
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            color: var(--text-primary);
+        }
+
+        .brand-subtitle {
+            font-size: 10.5px;
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+        }
+
+        /* Protocol Mode Switcher */
+        .mode-segmented-control {
+            display: flex;
+            background: rgba(6, 11, 18, 0.9);
+            padding: 3px;
+            border-radius: 8px;
+            border: 1px solid var(--border-glow);
+            gap: 4px;
+        }
+
+        .mode-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 11.5px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s ease;
+        }
+
+        .mode-btn.active.marl {
+            background: rgba(82, 217, 201, 0.2);
+            color: var(--accent-cyan);
+            box-shadow: 0 0 10px rgba(82, 217, 201, 0.25);
+            border: 1px solid var(--accent-cyan);
+        }
+
+        .mode-btn.active.flooding {
+            background: rgba(255, 180, 84, 0.2);
+            color: var(--accent-amber);
+            box-shadow: 0 0 10px rgba(255, 180, 84, 0.25);
+            border: 1px solid var(--accent-amber);
+        }
+
+        .mode-btn.active.compare {
+            background: rgba(167, 139, 250, 0.2);
+            color: var(--accent-purple);
+            box-shadow: 0 0 10px rgba(167, 139, 250, 0.25);
+            border: 1px solid var(--accent-purple);
+        }
+
+        /* Guided Scenario Ribbon */
+        .scenario-ribbon {
+            background: #08101A;
+            border-bottom: 1px solid var(--border-glow);
+            padding: 6px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .scenario-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .scenario-label {
+            font-size: 10.5px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glow);
+            color: var(--text-primary);
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.15s ease;
+        }
+
+        .btn:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-cyan);
+        }
+
+        .btn-scenario {
+            background: rgba(10, 20, 32, 0.8);
+            border: 1px solid rgba(82, 217, 201, 0.3);
+            color: var(--text-primary);
+        }
+
+        .btn-scenario:hover {
+            background: rgba(82, 217, 201, 0.15);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .btn-eli5 {
+            background: rgba(167, 139, 250, 0.15);
+            border: 1px solid var(--accent-purple);
+            color: var(--accent-purple);
+        }
+
+        /* Live Narrative Storyline Banner */
+        .narrative-banner {
+            background: linear-gradient(90deg, rgba(82, 217, 201, 0.12) 0%, rgba(10, 20, 32, 0.95) 100%);
+            border-bottom: 1px solid rgba(82, 217, 201, 0.3);
+            padding: 6px 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #E2E8F0;
+        }
+
+        .narrative-tag {
+            background: var(--accent-cyan);
+            color: #060B12;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 9.5px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            font-family: var(--font-mono);
+            white-space: nowrap;
+        }
+
+        .narrative-text {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Comparative HUD Cards */
+        .hud-metrics-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            padding: 8px 18px;
+            background: var(--bg-deep);
+            border-bottom: 1px solid rgba(26, 48, 72, 0.5);
+        }
+
+        .metric-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glow);
+            border-radius: 7px;
+            padding: 8px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 3px;
+            height: 100%;
+            background: var(--accent-cyan);
+        }
+
+        .metric-card.coral::before { background: var(--accent-coral); }
+        .metric-card.purple::before { background: var(--accent-purple); }
+        .metric-card.amber::before { background: var(--accent-amber); }
+        .metric-card.blue::before { background: var(--accent-blue); }
+
+        .metric-title {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            font-weight: 700;
+        }
+
+        .metric-value-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+        }
+
+        .metric-main-value {
+            font-size: 18px;
+            font-weight: 800;
+            font-family: var(--font-mono);
+            color: var(--text-primary);
+        }
+
+        .metric-diff-badge {
+            font-size: 10px;
+            font-family: var(--font-mono);
+            color: var(--accent-cyan);
+            background: rgba(82, 217, 201, 0.1);
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-weight: 700;
+        }
+
+        .metric-subtext {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+        }
+
+        /* Workspace Grid: Canvas + Side Inspector */
+        .workspace {
+            display: flex;
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #meshCanvas {
+            flex: 1;
+            background-color: #060B12;
+            cursor: grab;
+        }
+
+        #meshCanvas:active {
+            cursor: grabbing;
+        }
+
+        /* Visual Legend Bar */
+        .legend-overlay {
+            position: absolute;
+            bottom: 10px;
+            left: 16px;
+            background: rgba(10, 20, 32, 0.88);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-glow);
+            border-radius: 7px;
+            padding: 5px 12px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 10.5px;
+            color: var(--text-secondary);
+            z-index: 10;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .legend-icon {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        /* Map Controls (Zoom / Recenter) */
+        .map-tools {
+            position: absolute;
+            top: 12px;
+            left: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 15;
+        }
+
+        .map-tool-btn {
+            background: rgba(10, 20, 32, 0.9);
+            border: 1px solid var(--border-glow);
+            color: var(--text-primary);
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .map-tool-btn:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        /* Floating Inspector Sidebar */
+        .floating-sidebar {
+            width: 320px;
+            background: rgba(10, 20, 32, 0.96);
+            border-left: 1px solid var(--border-glow);
+            backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+            z-index: 50;
+        }
+
+        .inspector-header {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border-glow);
+            font-size: 12px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--text-primary);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 2px 7px;
+            background: rgba(82, 217, 201, 0.1);
+            border: 1px solid rgba(82, 217, 201, 0.3);
+            border-radius: 10px;
+            font-size: 10px;
+            color: var(--accent-cyan);
+            font-family: var(--font-mono);
+        }
+
+        .inspector-body {
+            padding: 12px 14px;
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .node-stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .stat-box {
+            background: rgba(6, 11, 18, 0.8);
+            border: 1px solid var(--border-glow);
+            border-radius: 6px;
+            padding: 6px 8px;
+        }
+
+        .stat-label {
+            font-size: 9.5px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .stat-val {
+            font-size: 13px;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            color: var(--accent-cyan);
+            margin-top: 2px;
+        }
+
+        .gauge-bar-container {
+            width: 100%;
+            height: 7px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 3px;
+        }
+
+        .gauge-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent-cyan) 0%, var(--accent-amber) 60%, var(--accent-coral) 100%);
+            transition: width 0.3s ease;
+        }
+
+        .qtable-container {
+            background: rgba(6, 11, 18, 0.9);
+            border: 1px solid var(--border-glow);
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-family: var(--font-mono);
+            font-size: 10.5px;
+            max-height: 110px;
+            overflow-y: auto;
+        }
+
+        .qtable-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 2.5px 0;
+            border-bottom: 1px solid rgba(26, 48, 72, 0.3);
+        }
+
+        /* Logcat Stream Drawer */
+        .logcat-container {
+            height: 180px;
+            border-top: 1px solid var(--border-glow);
+            background: #04080D;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logcat-header {
+            padding: 6px 14px;
+            background: rgba(10, 20, 32, 0.8);
+            border-bottom: 1px solid var(--border-glow);
+            font-size: 10.5px;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            color: var(--text-secondary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logcat-entries {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 10px;
+            font-family: var(--font-mono);
+            font-size: 10px;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 2px;
+        }
+
+        .log-time { color: var(--text-muted); }
+        .log-cat { font-weight: 700; }
+        .log-cat.MARL_ROUTER { color: var(--accent-cyan); }
+        .log-cat.FLOODING_STORM { color: var(--accent-amber); }
+        .log-cat.SECURITY_ALERT { color: var(--accent-coral); font-weight: 900; }
+        .log-cat.ATTACK_INJECTED { color: var(--accent-coral); font-weight: 900; }
+        .log-cat.DELIVERY_ACK { color: #34D399; }
+        .log-cat.SYSTEM { color: var(--accent-blue); }
+        .log-msg { color: #D1D5DB; word-break: break-all; }
+
+        /* ELI5 Modal */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-card {
+            background: #0A1420;
+            border: 1px solid var(--accent-cyan);
+            border-radius: 12px;
+            width: 600px;
+            max-width: 90%;
+            padding: 22px;
+            box-shadow: 0 0 30px rgba(82, 217, 201, 0.25);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .modal-title {
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--accent-cyan);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-close {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .concept-card {
+            background: rgba(6, 11, 18, 0.8);
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .concept-title {
+            font-size: 12.5px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .concept-desc {
+            font-size: 11.5px;
+            color: #94A3B8;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Navigation & Protocol Switcher -->
+    <header>
+        <div class="brand-section">
+            <div class="brand-logo">C</div>
+            <div>
+                <div class="brand-title">COGNITIVE EDGE MESH &bull; DIGITAL TWIN</div>
+                <div class="brand-subtitle">Intelligent Predictive Routing vs Legacy Flooding Simulator</div>
+            </div>
+        </div>
+
+        <div class="mode-segmented-control">
+            <button class="mode-btn active marl" id="btnModeMarl" onclick="setMode('MARL')">
+                &#129504; MARL Q-Routing (Smart)
+            </button>
+            <button class="mode-btn flooding" id="btnModeFlood" onclick="setMode('FLOODING')">
+                &#127754; Legacy Flooding (Shouting)
+            </button>
+            <button class="mode-btn compare" id="btnModeCompare" onclick="setMode('COMPARISON')">
+                &#9876; Compare Side-by-Side
+            </button>
+        </div>
+
+        <button class="btn btn-eli5" onclick="openEli5Modal()">
+            &#10067; How It Works (Explain Simply)
+        </button>
+    </header>
+
+    <!-- Guided Storyline Scenarios Ribbon -->
+    <section class="scenario-ribbon">
+        <div class="scenario-group">
+            <span class="scenario-label">&#127916; Try Scenarios:</span>
+            <button class="btn btn-scenario" onclick="runScenario(1)">
+                <b>1</b> Broadcast Storm (Flooding)
+            </button>
+            <button class="btn btn-scenario" onclick="runScenario(2)">
+                <b>2</b> MARL Q-Routing (Smart)
+            </button>
+            <button class="btn btn-scenario" onclick="runScenario(3)">
+                <b>3</b> SOS Emergency Fast-Track
+            </button>
+            <button class="btn btn-scenario" onclick="runScenario(4)">
+                <b>4</b> Sinkhole Attack &amp; Trust IDS
+            </button>
+        </div>
+
+        <div class="scenario-group">
+            <button class="btn" onclick="sendAction('trigger_chat')">
+                &#128172; Send Message
+            </button>
+            <button class="btn" onclick="sendAction('trigger_chat', { is_emergency: true })">
+                &#128680; Send SOS
+            </button>
+            <button class="btn" id="btnSlm" onclick="sendAction('toggle_slm')">
+                Triage: ON
+            </button>
+            <button class="btn" onclick="sendAction('clear_quarantine')">
+                &#10003; Clear Quarantine
+            </button>
+            <select class="btn" id="speedSelect" onchange="sendAction('set_speed', { speed: parseFloat(this.value) })" title="Simulation speed">
+                <option value="1">1x</option>
+                <option value="2">2x</option>
+                <option value="4">4x</option>
+            </select>
+            <button class="btn" id="btnPlayPause" onclick="togglePlayPause()">
+                <span id="playIcon">&#9646;&#9646;</span> Pause
+            </button>
+            <button class="btn" onclick="sendAction('reset_topology')">
+                &#8634; Reset Mesh
+            </button>
+        </div>
+    </section>
+
+    <!-- Live Narrative Banner -->
+    <div class="narrative-banner">
+        <span class="narrative-tag" id="simClock">LIVE SIMULATION</span>
+        <span class="narrative-text" id="narrativeText">Digital Twin map active. Pedestrian nodes are roaming and discovering dynamic BLE links.</span>
+    </div>
+
+    <!-- Comparative HUD Metrics (4 Cards) -->
+    <section class="hud-metrics-bar">
+        <div class="metric-card">
+            <span class="metric-title">Transmissions (MARL data + control)</span>
+            <div class="metric-value-row">
+                <span class="metric-main-value" id="hudMarlTx">0</span>
+                <span class="metric-diff-badge" id="hudTxSavings">&ndash;</span>
+            </div>
+            <span class="metric-subtext" id="hudFloodTx">Flooding: 0 pkts</span>
+        </div>
+
+        <div class="metric-card coral">
+            <span class="metric-title">Network Collisions</span>
+            <div class="metric-value-row">
+                <span class="metric-main-value" id="hudCollisions" style="color: var(--accent-coral);">0</span>
+                <span class="metric-diff-badge" style="color: var(--accent-coral); background: rgba(255,107,94,0.1);">Flooding</span>
+            </div>
+            <span class="metric-subtext" id="hudIds">MARL uses scheduled unicast &bull; Trust IDS idle</span>
+        </div>
+
+        <div class="metric-card amber">
+            <span class="metric-title">Energy (battery %, all nodes)</span>
+            <div class="metric-value-row">
+                <span class="metric-main-value" id="hudMarlBatt">0.0%</span>
+                <span class="metric-diff-badge" style="color: var(--accent-amber); background: rgba(255,180,84,0.1);" id="hudBattRatio">&ndash;</span>
+            </div>
+            <span class="metric-subtext" id="hudFloodBatt">Flooding Burn: 0.0%</span>
+        </div>
+
+        <div class="metric-card blue">
+            <span class="metric-title">Delivery Rate</span>
+            <div class="metric-value-row">
+                <span class="metric-main-value" id="hudDeliveryRate">&ndash;</span>
+                <span class="metric-diff-badge" id="hudDeliveredCount">0 Delivered</span>
+            </div>
+            <span class="metric-subtext" id="hudDeliverySub">MARL delivery ratio</span>
+        </div>
+    </section>
+
+    <!-- Main Workspace -->
+    <main class="workspace">
+        <!-- Canvas Map -->
+        <canvas id="meshCanvas"></canvas>
+
+        <!-- Map Navigation Tools -->
+        <div class="map-tools">
+            <button class="map-tool-btn" onclick="zoomMap(1.15)" title="Zoom In">+</button>
+            <button class="map-tool-btn" onclick="zoomMap(0.85)" title="Zoom Out">&minus;</button>
+            <button class="map-tool-btn" onclick="recenterMap()" title="Fit Map to Screen">&#9678;</button>
+        </div>
+
+        <!-- Visual Legend Overlay -->
+        <div class="legend-overlay">
+            <div class="legend-item">
+                <div class="legend-icon" style="background: #38BDF8; box-shadow: 0 0 6px #38BDF8;"></div>
+                <span>Active Mesh Node</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-icon" style="background: #52D9C9;"></div>
+                <span>MARL Predictive Path</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-icon" style="background: #FFB454;"></div>
+                <span>Flooding Storm Wave</span>
+            </div>
+        </div>
+
+        <!-- Floating Node Inspector Sidebar -->
+        <aside class="floating-sidebar">
+            <div class="inspector-header">
+                <span id="inspNodeTitle">NODE INSPECTOR</span>
+                <span class="status-badge" id="inspStatusBadge">SELECT A NODE</span>
+            </div>
+
+            <div class="inspector-body">
+                <div class="node-stat-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Battery Health</div>
+                        <div class="stat-val" id="inspBattery">100%</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Buffer Queue</div>
+                        <div class="stat-val" id="inspBuffer">10%</div>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="font-size: 10.5px; font-weight: 700; color: var(--text-secondary); margin-bottom: 5px; text-transform: uppercase;">
+                        Learned Best Next-Hop Routing
+                    </div>
+                    <div class="qtable-container" id="inspQTable">
+                        <div style="color: var(--text-muted); text-align: center; padding: 8px;">Click any roaming phone node to inspect its routing brain</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Event Logcat -->
+            <div class="logcat-container">
+                <div class="logcat-header">
+                    <span>LIVE MESH EVENT LOGCAT</span>
+                    <span style="font-size: 9px; cursor: pointer; color: var(--accent-cyan);" onclick="clearLogs()">CLEAR</span>
+                </div>
+                <div class="logcat-entries" id="logcatEntries"></div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- ELI5 Simple Explanation Modal -->
+    <div class="modal-backdrop" id="eli5Modal">
+        <div class="modal-card">
+            <div class="modal-title">
+                <span>&#129504; How the Cognitive Edge Mesh Works</span>
+                <button class="modal-close" onclick="closeEli5Modal()">&times;</button>
+            </div>
+
+            <div class="concept-card">
+                <div class="concept-title" style="color: var(--accent-amber);">
+                    &#127754; 1. The Problem: Legacy Flooding ("The Shouting Room")
+                </div>
+                <div class="concept-desc">
+                    In BitChat-style meshes every phone that hears a message <b>rebroadcasts it once, up to 7 hops</b>. One broadcast is one transmission, but <b>every neighbour pays to receive it</b>, and neighbours that rebroadcast in the same time slot <b>collide</b>. The "Network Collisions" card counts those collisions live.
+                </div>
+            </div>
+
+            <div class="concept-card">
+                <div class="concept-title" style="color: var(--accent-cyan);">
+                    &#129504; 2. The Solution: Predictive MARL Routing ("The Smart Courier")
+                </div>
+                <div class="concept-desc">
+                    Each phone learns its own small Q-function from <b>only what it can see locally</b>: neighbour beacons, signal strength, and how likely each neighbour is to <b>meet the destination soon</b> (learned from encounter history). It either hands the message to one neighbour or <b>carries it</b> until a better relay comes into range. When two phones meet they <b>average their model weights</b> (gossip federated learning). No locations or messages are shared.
+                </div>
+            </div>
+
+            <div class="concept-card">
+                <div class="concept-title" style="color: var(--accent-purple);">
+                    &#128680; 3. Cognitive Triage &amp; 4. Trust IDS
+                </div>
+                <div class="concept-desc">
+                    An on-device triage model spots emergencies and encodes them as a few semantic tokens (about <b>110 B &rarr; 30 B</b> on air). SOS messages get priority, two copies and no exploration. Every hop is confirmed by a <b>two-hop ACK</b>; a node that keeps swallowing packets drives up a CUSUM change detector compared with its neighbourhood, and it is <b>quarantined</b> automatically (scenario 4).
+                </div>
+            </div>
+
+            <button class="btn btn-scenario" style="width: 100%; justify-content: center; padding: 10px; font-size: 13px;" onclick="closeEli5Modal()">
+                &#10004; Got it, let me explore the simulation!
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('meshCanvas');
+        const ctx = canvas.getContext('2d');
+        let selectedNodeId = null;
+        let isPaused = false;
+        let currentMode = 'MARL';
+
+        // Camera Pan & Zoom Transform State
+        let camera = {
+            x: 0,
+            y: 0,
+            scale: 1.0,
+            isDragging: false,
+            startX: 0,
+            startY: 0
+        };
+
+        let simulationState = {
+            nodes: [],
+            edges: [],
+            packets: [],
+            flood_branches: [],
+            world_bounds: { width: 900, height: 550 },
+            narrative: "",
+            protocol_mode: "MARL",
+            metrics: {},
+            logs: []
+        };
+
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth - 320;
+            canvas.height = canvas.parentElement.clientHeight;
+            recenterMap();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function recenterMap() {
+            const worldW = simulationState.world_bounds?.width || 900;
+            const worldH = simulationState.world_bounds?.height || 550;
+            const padding = 45;
+
+            const scaleX = (canvas.width - padding * 2) / worldW;
+            const scaleY = (canvas.height - padding * 2) / worldH;
+            camera.scale = Math.min(scaleX, scaleY);
+            camera.x = (canvas.width - worldW * camera.scale) / 2;
+            camera.y = (canvas.height - worldH * camera.scale) / 2;
+        }
+
+        // Coordinate Transformer: World -> Canvas Screen Space
+        function toScreen(worldX, worldY) {
+            return {
+                x: camera.x + worldX * camera.scale,
+                y: camera.y + worldY * camera.scale
+            };
+        }
+
+        function toWorld(screenX, screenY) {
+            return {
+                x: (screenX - camera.x) / camera.scale,
+                y: (screenY - camera.y) / camera.scale
+            };
+        }
+
+        // Pan and Zoom Event Listeners
+        canvas.addEventListener('mousedown', (e) => {
+            camera.isDragging = true;
+            camera.startX = e.clientX - camera.x;
+            camera.startY = e.clientY - camera.y;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (camera.isDragging) {
+                camera.x = e.clientX - camera.startX;
+                camera.y = e.clientY - camera.startY;
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            camera.isDragging = false;
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+            zoomMap(zoomFactor, e.clientX - canvas.getBoundingClientRect().left, e.clientY - canvas.getBoundingClientRect().top);
+        }, { passive: false });
+
+        function zoomMap(factor, centerX = canvas.width / 2, centerY = canvas.height / 2) {
+            const newScale = Math.max(0.4, Math.min(3.5, camera.scale * factor));
+            camera.x = centerX - (centerX - camera.x) * (newScale / camera.scale);
+            camera.y = centerY - (centerY - camera.y) * (newScale / camera.scale);
+            camera.scale = newScale;
+        }
+
+        // WebSocket Setup
+        let ws;
+        function connectWebSocket() {
+            const wsUrl = `ws://${window.location.hostname || 'localhost'}:8765`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onmessage = (event) => {
+                simulationState = JSON.parse(event.data);
+                if (simulationState.narrative) {
+                    document.getElementById('narrativeText').innerText = simulationState.narrative;
+                }
+                updateHudMetrics(simulationState.metrics);
+                if (simulationState.sim_time != null)
+                    document.getElementById('simClock').innerText = `${simulationState.is_paused ? 'PAUSED' : 'LIVE'} t=${simulationState.sim_time}s`;
+                if (simulationState.protocol_mode && simulationState.protocol_mode !== currentMode) {
+                    currentMode = simulationState.protocol_mode;
+                    const mm = currentMode;
+                    document.getElementById('btnModeMarl').className = `mode-btn marl ${mm === 'MARL' ? 'active' : ''}`;
+                    document.getElementById('btnModeFlood').className = `mode-btn flooding ${mm === 'FLOODING' ? 'active' : ''}`;
+                    document.getElementById('btnModeCompare').className = `mode-btn compare ${mm === 'COMPARISON' ? 'active' : ''}`;
+                }
+                if (simulationState.slm_on != null)
+                    document.getElementById('btnSlm').innerText = `Triage: ${simulationState.slm_on ? 'ON' : 'OFF'}`;
+                updateLogcat(simulationState.logs);
+                if (selectedNodeId) updateInspector(selectedNodeId);
+            };
+
+            ws.onclose = () => setTimeout(connectWebSocket, 2000);
+            ws.onerror = () => ws.close();
+        }
+        connectWebSocket();
+
+        function sendAction(action, extra = {}) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action, ...extra }));
+            }
+        }
+
+        // Protocol Mode Switcher
+        function setMode(mode) {
+            currentMode = mode;
+            sendAction('set_protocol_mode', { mode });
+
+            document.getElementById('btnModeMarl').className = `mode-btn marl ${mode === 'MARL' ? 'active' : ''}`;
+            document.getElementById('btnModeFlood').className = `mode-btn flooding ${mode === 'FLOODING' ? 'active' : ''}`;
+            document.getElementById('btnModeCompare').className = `mode-btn compare ${mode === 'COMPARISON' ? 'active' : ''}`;
+        }
+
+        function runScenario(id) {
+            sendAction('run_scenario', { scenario_id: id });
+        }
+
+        function togglePlayPause() {
+            isPaused = !isPaused;
+            sendAction('toggle_pause');
+            document.getElementById('playIcon').innerHTML = isPaused ? '&#9654;' : '&#9646;&#9646;';
+            document.getElementById('btnPlayPause').innerHTML = `<span id="playIcon">${isPaused ? '&#9654;' : '&#9646;&#9646;'}</span> ${isPaused ? 'Resume' : 'Pause'}`;
+        }
+
+        function openEli5Modal() {
+            document.getElementById('eli5Modal').style.display = 'flex';
+        }
+
+        function closeEli5Modal() {
+            document.getElementById('eli5Modal').style.display = 'none';
+        }
+
+        function pct(x) { return `${Math.round((x || 0) * 100)}%`; }
+
+        function updateHudMetrics(m) {
+            if (!m) return;
+            document.getElementById('hudMarlTx').innerText = m.marl_transmissions || 0;
+            document.getElementById('hudFloodTx').innerText =
+                `data ${m.marl_data_tx || 0} + control ${m.marl_control_tx || 0} | Flooding: ${m.flooding_transmissions || 0}`;
+            const perM = m.marl_delivered ? m.marl_transmissions / m.marl_delivered : 0;
+            const perF = m.flood_delivered ? m.flooding_transmissions / m.flood_delivered : 0;
+            document.getElementById('hudTxSavings').innerText = (perM && perF)
+                ? `${perM.toFixed(1)} vs ${perF.toFixed(1)} tx/msg` : 'tx per delivery';
+
+            document.getElementById('hudCollisions').innerText = m.collision_count || 0;
+            const ids = m.ids_detection_s != null ? `IDS caught sinkhole in ${m.ids_detection_s}s` :
+                (m.sinkhole_drops ? `${m.sinkhole_drops} packets lost to sinkhole` : 'Trust IDS idle');
+            document.getElementById('hudIds').innerText = `MARL: unicast, no storm • ${ids}`;
+
+            document.getElementById('hudMarlBatt').innerText = `${m.marl_battery_burn || 0}`;
+            document.getElementById('hudFloodBatt').innerText = `Flooding: ${m.flooding_battery_burn || 0} • FL rounds ${m.fl_rounds || 0}`;
+            const eM = m.marl_delivered ? m.marl_battery_burn / m.marl_delivered : 0;
+            const eF = m.flood_delivered ? m.flooding_battery_burn / m.flood_delivered : 0;
+            document.getElementById('hudBattRatio').innerText = (eM && eF) ? `${(eF / eM).toFixed(1)}x less / msg` : 'per delivery';
+
+            document.getElementById('hudDeliveryRate').innerText = m.marl_generated ? pct(m.marl_pdr) : '–';
+            document.getElementById('hudDeliveredCount').innerText = `${m.marl_delivered || 0}/${m.marl_generated || 0} delivered`;
+            const fl = m.flood_generated ? `Flooding ${pct(m.flood_pdr)} • ` : '';
+            document.getElementById('hudDeliverySub').innerText =
+                `${fl}latency ${m.marl_latency_s}s (flood ${m.flood_latency_s}s) • triage ${m.triage_raw_bytes}→${m.triage_air_bytes}B`;
+        }
+
+        let logsClearedKey = null;
+        function esc(t) { return String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+        function updateLogcat(logs) {
+            if (!logs) return;
+            if (logsClearedKey) {
+                const idx = logs.findIndex(l => l.time + l.message === logsClearedKey);
+                if (idx >= 0) logs = logs.slice(idx + 1);
+            }
+            const container = document.getElementById('logcatEntries');
+            container.innerHTML = logs.map(l => `
+                <div class="log-entry">
+                    <span class="log-time">[${l.time}]</span>
+                    <span class="log-cat ${l.category}">[${l.category}]</span>
+                    <span class="log-msg">${esc(l.message)}</span>
+                </div>
+            `).join('');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function clearLogs() {
+            const logs = simulationState.logs || [];
+            if (logs.length) logsClearedKey = logs[logs.length - 1].time + logs[logs.length - 1].message;
+            document.getElementById('logcatEntries').innerHTML = '';
+        }
+
+        // --- Canvas Rendering Loop ---
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Campus / Spatial Map Background & Grid
+            drawSpatialMap();
+
+            // 2. Radio Proximity Edges
+            drawEdges();
+
+            // 3. Flooding Storm Waves
+            drawFloodWaves();
+
+            // 4. Roaming Nodes
+            drawNodes();
+
+            // 5. MARL Laser Beams
+            drawPackets();
+
+            requestAnimationFrame(render);
+        }
+
+        // Initial setup and launch render loop
+        setTimeout(resizeCanvas, 100);
+        requestAnimationFrame(render);
+
+        function drawSpatialMap() {
+            const worldW = simulationState.world_bounds?.width || 900;
+            const worldH = simulationState.world_bounds?.height || 550;
+
+            const topLeft = toScreen(0, 0);
+            const botRight = toScreen(worldW, worldH);
+            const mapW = botRight.x - topLeft.x;
+            const mapH = botRight.y - topLeft.y;
+
+            // Map Bounding Outline with soft glow
+            ctx.strokeStyle = 'rgba(82, 217, 201, 0.25)';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(topLeft.x, topLeft.y, mapW, mapH);
+
+            // Subtle cyber pathways
+            ctx.strokeStyle = 'rgba(26, 48, 72, 0.3)';
+            ctx.lineWidth = 1;
+
+            const step = 60 * camera.scale;
+            for (let x = topLeft.x; x <= botRight.x; x += step) {
+                ctx.beginPath();
+                ctx.moveTo(x, topLeft.y);
+                ctx.lineTo(x, botRight.y);
+                ctx.stroke();
+            }
+            for (let y = topLeft.y; y <= botRight.y; y += step) {
+                ctx.beginPath();
+                ctx.moveTo(topLeft.x, y);
+                ctx.lineTo(botRight.x, y);
+                ctx.stroke();
+            }
+
+            // Campus Plaza concentric center circles
+            const center = toScreen(worldW / 2, worldH / 2);
+            ctx.strokeStyle = 'rgba(82, 217, 201, 0.08)';
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, 140 * camera.scale, 0, Math.PI * 2);
+            ctx.arc(center.x, center.y, 240 * camera.scale, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        function drawEdges() {
+            if (!simulationState.edges) return;
+            const nodeMap = new Map(simulationState.nodes.map(n => [n.id, n]));
+
+            simulationState.edges.forEach(edge => {
+                const u = nodeMap.get(edge.source);
+                const v = nodeMap.get(edge.target);
+                if (!u || !v) return;
+
+                const p1 = toScreen(u.x, u.y);
+                const p2 = toScreen(v.x, v.y);
+
+                ctx.strokeStyle = 'rgba(82, 217, 201, 0.18)';
+                ctx.lineWidth = Math.max(1, 1.2 * camera.scale);
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+            });
+        }
+
+        function drawFloodWaves() {
+            if (!simulationState.flood_branches) return;
+            const nodeMap = new Map(simulationState.nodes.map(n => [n.id, n]));
+
+            simulationState.flood_branches.forEach(fb => {
+                const u = nodeMap.get(fb.from);
+                const v = nodeMap.get(fb.to);
+                if (!u || !v) return;
+
+                const curWorldX = u.x + (v.x - u.x) * fb.progress;
+                const curWorldY = u.y + (v.y - u.y) * fb.progress;
+                const p = toScreen(curWorldX, curWorldY);
+
+                ctx.strokeStyle = fb.collided ? `rgba(255, 107, 94, ${1.0 - fb.progress})` : `rgba(255, 180, 84, ${1.0 - fb.progress})`;
+                ctx.lineWidth = 2.0 * camera.scale;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, (5 + fb.progress * 14) * camera.scale, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+        }
+
+        function drawNodes() {
+            if (!simulationState.nodes) return;
+
+            simulationState.nodes.forEach(node => {
+                const isSelected = node.id === selectedNodeId;
+                const isSinkhole = node.is_sinkhole;
+                const isQuarantined = node.is_quarantined;
+                const p = toScreen(node.x, node.y);
+                const r = 13 * camera.scale;
+
+                // Selection / Radio Halo
+                if (isSelected) {
+                    ctx.strokeStyle = 'rgba(82, 217, 201, 0.4)';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([4, 4]);
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 190 * camera.scale, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                // AI Quarantine Shield / Cross
+                if (isQuarantined) {
+                    ctx.strokeStyle = 'rgba(255, 107, 94, 0.9)';
+                    ctx.lineWidth = 2.2 * camera.scale;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 19 * camera.scale, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(p.x - 10 * camera.scale, p.y - 10 * camera.scale);
+                    ctx.lineTo(p.x + 10 * camera.scale, p.y + 10 * camera.scale);
+                    ctx.stroke();
+                }
+
+                // Node Body
+                ctx.shadowBlur = isQuarantined ? 16 : (isSinkhole ? 14 : 8);
+                ctx.shadowColor = isQuarantined ? '#FF6B5E' : (isSinkhole ? '#FF6B5E' : '#38BDF8');
+
+                ctx.fillStyle = isQuarantined ? '#3B1219' : (isSinkhole ? '#4A151E' : '#0A1E32');
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Battery Gauge Ring
+                const battPct = node.battery / 100.0;
+                ctx.strokeStyle = battPct > 0.4 ? '#52D9C9' : (battPct > 0.2 ? '#FFB454' : '#FF6B5E');
+                ctx.lineWidth = 2.2 * camera.scale;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, r + 2 * camera.scale, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * battPct));
+                ctx.stroke();
+
+                // Node Label
+                ctx.fillStyle = isQuarantined ? '#FF6B5E' : '#F0F6FC';
+                ctx.font = `bold ${Math.max(9, Math.round(10 * camera.scale))}px var(--font-sans)`;
+                ctx.textAlign = 'center';
+                ctx.fillText(node.id, p.x, p.y + r + 14 * camera.scale);
+            });
+        }
+
+        function drawPackets() {
+            if (!simulationState.packets) return;
+            const nodeMap = new Map(simulationState.nodes.map(n => [n.id, n]));
+
+            simulationState.packets.forEach(pkt => {
+                const path = pkt.path;
+                if (!path || path.length < 2) return;
+
+                // Laser path line
+                ctx.strokeStyle = pkt.is_emergency ? 'rgba(255, 180, 84, 0.7)' : 'rgba(82, 217, 201, 0.6)';
+                ctx.lineWidth = (pkt.is_emergency ? 2.6 : 1.8) * camera.scale;
+                ctx.beginPath();
+                for (let i = 0; i < path.length; i++) {
+                    const n = nodeMap.get(path[i]);
+                    if (n) {
+                        const p = toScreen(n.x, n.y);
+                        if (i === 0) ctx.moveTo(p.x, p.y);
+                        else ctx.lineTo(p.x, p.y);
+                    }
+                }
+                ctx.stroke();
+
+                // Laser Particle Pulse
+                const hop = pkt.hop_idx;
+                if (pkt.carrying) {
+                    const h = nodeMap.get(path[path.length - 1]);
+                    if (h) {
+                        const p = toScreen(h.x, h.y);
+                        ctx.strokeStyle = pkt.is_emergency ? '#FFB454' : '#52D9C9';
+                        ctx.lineWidth = 2 * camera.scale;
+                        ctx.setLineDash([3, 3]);
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, 20 * camera.scale, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+                } else if (hop < path.length - 1) {
+                    const u = nodeMap.get(path[hop]);
+                    const v = nodeMap.get(path[hop + 1]);
+                    if (u && v) {
+                        const curWorldX = u.x + (v.x - u.x) * pkt.progress;
+                        const curWorldY = u.y + (v.y - u.y) * pkt.progress;
+                        const p = toScreen(curWorldX, curWorldY);
+
+                        ctx.shadowBlur = 12;
+                        ctx.shadowColor = pkt.is_emergency ? '#FFB454' : '#52D9C9';
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, (pkt.is_emergency ? 6 : 4.5) * camera.scale, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.shadowBlur = 0;
+                    }
+                }
+            });
+        }
+
+        // Click to Inspect Node
+        canvas.addEventListener('click', (e) => {
+            if (camera.isDragging) return;
+            const rect = canvas.getBoundingClientRect();
+            const clickScreenX = e.clientX - rect.left;
+            const clickScreenY = e.clientY - rect.top;
+
+            let closest = null;
+            let minDist = 22 * camera.scale;
+
+            simulationState.nodes.forEach(n => {
+                const p = toScreen(n.x, n.y);
+                const d = Math.hypot(p.x - clickScreenX, p.y - clickScreenY);
+                if (d < minDist) {
+                    minDist = d;
+                    closest = n;
+                }
+            });
+
+            if (closest) {
+                selectedNodeId = closest.id;
+                updateInspector(closest.id);
+            }
+        });
+
+        function updateInspector(nodeId) {
+            const node = simulationState.nodes.find(n => n.id === nodeId);
+            if (!node) return;
+
+            document.getElementById('inspNodeTitle').innerText = `INSPECTOR: ${node.id}`;
+            const bad = node.is_quarantined || node.is_sinkhole;
+            const badge = document.getElementById('inspStatusBadge');
+            badge.innerText = `${node.status} • anomaly ${(node.anomaly_score || 0).toFixed(2)}`;
+            badge.style.borderColor = bad ? 'var(--accent-coral)' : 'var(--accent-cyan)';
+            badge.style.color = bad ? 'var(--accent-coral)' : 'var(--accent-cyan)';
+
+            document.getElementById('inspBattery').innerText = `${node.battery}%`;
+            document.getElementById('inspBuffer').innerText = `${node.buffer}%`;
+
+            const qContainer = document.getElementById('inspQTable');
+            if (node.q_table && Object.keys(node.q_table).length > 0) {
+                let html = '';
+                const pTxt = (node.top_P || []).map(([d, p]) => `${d}:${p}`).join(', ');
+                html += `<div class="qtable-row"><span>Meets soonest (P)</span><span>${pTxt || '-'}</span></div>`;
+                html += `<div class="qtable-row"><span>Local TD updates</span><span>${node.samples || 0}</span></div>`;
+                for (const [dest, peers] of Object.entries(node.q_table)) {
+                    for (const [peer, qval] of Object.entries(peers)) {
+                        html += `
+                            <div class="qtable-row">
+                                <span>Route to ${dest} &rarr; ${peer}</span>
+                                <span style="color: var(--accent-cyan); font-weight: 700;">${qval.toFixed(2)}</span>
+                            </div>
+                        `;
+                    }
+                }
+                qContainer.innerHTML = html;
+            } else {
+                qContainer.innerHTML = `<div style="color: var(--text-muted); text-align: center; padding: 8px;">Learning dynamic neighbor routes...</div>`;
+            }
+        }
+    </script>
+</body>
+</html>
+
