@@ -65,11 +65,25 @@ sealed class Frame {
         val text: String,
         val mode: String,
         val ttl: Int,
+        /** Originator's profile name, so the receiver can show who wrote it. */
+        val srcName: String = "",
     ) : Frame() {
         val key get() = "$msgId:$copy"
         override fun toJson() = JSONObject().apply {
             put("t", "D"); put("m", msgId); put("c", copy); put("s", src); put("d", dst); put("o", createdAt)
             put("pa", JSONArray(path)); put("u", urgency); put("i", intent); put("x", text); put("md", mode); put("tl", ttl)
+            if (srcName.isNotEmpty()) put("sn", srcName)
+        }
+    }
+
+    /**
+     * "I exist, and this is my name": flooded by every phone every 30 s (TTL 7, deduplicated
+     * by src+seq), the way BitChat announces peers. Lets phones out of radio range appear by
+     * name, and tells each relay how many hops away [src] is and through which neighbour.
+     */
+    data class Announce(val src: String, val nick: String, val seq: Int, val hops: Int, val ttl: Int, val from: String) : Frame() {
+        override fun toJson() = JSONObject().apply {
+            put("t", "N"); put("s", src); put("n", nick); put("q", seq); put("h", hops); put("tl", ttl); put("f", from)
         }
     }
 
@@ -108,7 +122,9 @@ sealed class Frame {
                     j.getString("m"), j.getInt("c"), j.getString("s"), j.getString("d"), j.getLong("o"),
                     j.getJSONArray("pa").let { a -> List(a.length()) { a.getString(it) } },
                     j.getDouble("u"), j.getString("i"), j.getString("x"), j.getString("md"), j.optInt("tl", Protocol.FLOOD_TTL),
+                    j.optString("sn"),
                 )
+                "N" -> Announce(j.getString("s"), j.optString("n"), j.getInt("q"), j.optInt("h"), j.optInt("tl"), j.optString("f"))
                 "A" -> HopAck(j.getString("m"), j.getInt("c"), j.getString("s"), if (j.has("v")) j.getDouble("v") else null)
                 "F" -> FwdAck(j.getString("m"), j.getInt("c"), j.getString("s"))
                 "K" -> DeliveryAck(j.getString("m"), j.getString("s"), j.getString("d"), j.getLong("o"),
