@@ -1,11 +1,11 @@
 package com.bitchat.android.mesh
 
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import com.bitchat.android.marl.MarlRouter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,13 +28,24 @@ import kotlin.random.Random
  *  - Destination sends DELIVERY ACK back along the route; the source logs the RTT.
  */
 @SuppressLint("MissingPermission")
-class MeshEngine(private val context: Context) {
+class MeshEngine(
+    private val context: Context,
+    /** Thread the engine runs on; null = its own background thread. Tests pass the main looper. */
+    looper: Looper? = null,
+    /** Wall clock in ms. Tests pass a virtual clock so simulated minutes run in milliseconds. */
+    private val clock: () -> Long = System::currentTimeMillis,
+    /** Battery %, null = read the phone's battery. */
+    private val batteryLevel: (() -> Int)? = null,
+    /** Radio to use; null = real Bluetooth LE. */
+    radioFactory: RadioFactory? = null,
+    /** SharedPreferences file holding this phone's id and name (one per virtual phone in tests). */
+    prefsName: String = "mesh",
+) {
 
     // ------------------------------------------------------------ identity
 
-    private val thread = HandlerThread("mesh-engine").apply { start() }
-    private val handler = Handler(thread.looper)
-    private val prefs = context.getSharedPreferences("mesh", Context.MODE_PRIVATE)
+    private val handler = Handler(looper ?: HandlerThread("mesh-engine").apply { start() }.looper)
+    private val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
 
     val myId: String = prefs.getString("id", null) ?: String.format(Locale.US, "%08X", Random.nextInt()).also {
         prefs.edit().putString("id", it).apply()
@@ -46,7 +57,8 @@ class MeshEngine(private val context: Context) {
     private val fxEvents = ArrayDeque<FxEvent>()
     private var fxSeq = 0L
     private val router = MarlRouter(myId, cusumH = 6.0)
-    private val transport = BleTransport(context, handler, ::onAdvert, ::onFrame, ::onError)
+    private val transport: Radio = radioFactory?.invoke(handler, ::onAdvert, ::onFrame, ::onError)
+        ?: BleTransport(context, handler, ::onAdvert, ::onFrame, ::onError)
 
     // ------------------------------------------------------------ settings
 
@@ -60,7 +72,7 @@ class MeshEngine(private val context: Context) {
     // --------------------------------------------------------------- state
 
     private class Neighbor(val id: String) {
-        var device: BluetoothDevice? = null
+        var device: Any? = null // radio handle (BluetoothDevice on a phone)
         var rssi = -100.0
         var lastSeen = 0L
         var battery = 100
@@ -261,7 +273,7 @@ class MeshEngine(private val context: Context) {
         n.lastSeen = maxOf(n.lastSeen, now())
     }
 
-    private fun onAdvert(adv: Protocol.Advert, device: BluetoothDevice, rssi: Int) {
+    private fun onAdvert(adv: Protocol.Advert, device: Any, rssi: Int) {
         if (!running || adv.nodeId == myId) return
         val t = now()
         val n = neighbors.getOrPut(adv.nodeId) { Neighbor(adv.nodeId) }
@@ -655,9 +667,9 @@ class MeshEngine(private val context: Context) {
 
     // ---------------------------------------------------------------- helpers
 
-    private fun now() = System.currentTimeMillis()
+    private fun now() = clock()
 
-    private fun battery(): Int = try {
+    private fun battery(): Int = batteryLevel?.invoke() ?: try {
         context.getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
     } catch (_: Exception) { 100 }
 
