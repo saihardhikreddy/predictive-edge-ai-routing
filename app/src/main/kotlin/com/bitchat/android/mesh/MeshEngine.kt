@@ -135,7 +135,7 @@ class MeshEngine(private val context: Context) {
         }
     }
 
-    private val _state = MutableStateFlow(UiState(myId = myId, nick = nick))
+    private val _state = MutableStateFlow(UiState(myId = myId, nick = nick, nickSet = nickSet))
     val state: StateFlow<UiState> = _state
 
     // ------------------------------------------------------- public controls
@@ -251,8 +251,15 @@ class MeshEngine(private val context: Context) {
 
     // ------------------------------------------------------------ neighbours
 
+    /** Phones pause BLE adverts for several seconds at a time, so allow 12 s of silence. */
     private fun inRange(n: Neighbor, t: Long = now()) =
-        t - n.lastSeen < 6_000 && n.rssi >= rangeDbm && n.id !in blocked && n.device != null
+        t - n.lastSeen < 12_000 && n.rssi >= rangeDbm && n.id !in blocked && n.device != null
+
+    /** A frame written to our inbox proves its sender is still in direct range. */
+    private fun heardFrom(id: String?) {
+        val n = neighbors[id ?: return] ?: return
+        n.lastSeen = maxOf(n.lastSeen, now())
+    }
 
     private fun onAdvert(adv: Protocol.Advert, device: BluetoothDevice, rssi: Int) {
         if (!running || adv.nodeId == myId) return
@@ -409,6 +416,7 @@ class MeshEngine(private val context: Context) {
         if (d.ttl <= 0) return
         val out = d.copy(path = d.path + myId, ttl = d.ttl - 1)
         val targets = neighbors.values.filter { inRange(it) && it.id !in d.path && it.id != from }
+            .sortedBy { if (it.id == d.dst) 0 else 1 } // the destination hears it first, directly
         if (targets.isEmpty()) log.write("FLOOD_NO_NEIGHBOR", mode = d.mode, msg = d.msgId)
         targets.forEach { sendFrame(it.id, out) {} }
     }
@@ -433,9 +441,19 @@ class MeshEngine(private val context: Context) {
 
     private fun decide(s: Stored, t: Long) {
         val d = s.data
+        // a sibling SOS copy was already handed straight to the destination: this one is redundant
+        if (d.dst in s.avoid) {
+            store.remove(s)
+            log.write("COPY_SKIPPED", mode = d.mode, msg = d.msgId, value = "sibling went direct")
+            return
+        }
         val exclude = HashSet<String>(d.path).apply { add(myId); addAll(s.avoid) }
-        val infos = neighborInfos(exclude)
-        val dec = router.decide(d.dst, infos, emergency = d.urgency >= 5.0)
+        val all = neighborInfos(exclude)
+        // Destination in direct range over a usable link: hand it over directly (1 hop).
+        // The learned router only chooses among relays when the destination is not reachable.
+        val direct = all.firstOrNull { it.peerId == d.dst && MarlRouter.packetSuccessProb(it.rssi) >= 0.5 }
+        val infos = if (direct != null) listOf(direct) else all
+        val dec = router.decide(d.dst, infos, emergency = direct != null || d.urgency >= 5.0)
         val best = dec.qValues.values.maxOrNull() ?: 0.0
         s.carryFeatures?.let { if (!sinkhole) router.onCarryResolved(it, best) }
         s.carryFeatures = null
@@ -471,7 +489,16 @@ class MeshEngine(private val context: Context) {
 
     private fun onFrame(bytes: ByteArray) {
         if (!running) return
-        when (val f = Frame.decode(bytes)) {
+        val f = Frame.decode(bytes)
+        heardFrom(when (f) {
+            is Frame.Hello -> f.src
+            is Frame.Announce -> f.from
+            is Frame.Data -> f.path.lastOrNull()
+            is Frame.HopAck -> f.src
+            is Frame.FwdAck -> f.src
+            else -> null
+        })
+        when (f) {
             is Frame.Hello -> onHello(f)
             is Frame.Announce -> onAnnounce(f)
             is Frame.Data -> onData(f, bytes.size)
