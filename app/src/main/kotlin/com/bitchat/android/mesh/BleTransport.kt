@@ -36,10 +36,10 @@ import java.io.ByteArrayOutputStream
 class BleTransport(
     private val context: Context,
     private val handler: Handler,
-    private val onAdvert: (Protocol.Advert, BluetoothDevice, Int) -> Unit,
+    private val onAdvert: (Protocol.Advert, Any, Int) -> Unit,
     private val onFrame: (ByteArray) -> Unit,
     private val onError: (String) -> Unit,
-) {
+) : Radio {
     private val manager = context.getSystemService(BluetoothManager::class.java)
     private val adapter get() = manager?.adapter
     private var server: BluetoothGattServer? = null
@@ -47,11 +47,11 @@ class BleTransport(
     private var scanning = false
     private val serviceParcel = ParcelUuid(Protocol.SERVICE_UUID)
 
-    val isEnabled: Boolean get() = adapter?.isEnabled == true
+    override val isEnabled: Boolean get() = adapter?.isEnabled == true
 
     // ----------------------------------------------------------- lifecycle
 
-    fun start(advert: ByteArray) {
+    override fun start(advert: ByteArray) {
         stopped = false
         startServer()
         startAdvertising(advert)
@@ -60,7 +60,7 @@ class BleTransport(
 
     private var stopped = false
 
-    fun stop() {
+    override fun stop() {
         stopped = true
         try {
             if (scanning) adapter?.bluetoothLeScanner?.stopScan(scanCallback)
@@ -82,7 +82,7 @@ class BleTransport(
         }
     }
 
-    fun startAdvertising(advert: ByteArray) {
+    override fun startAdvertising(advert: ByteArray) {
         val adv = adapter?.bluetoothLeAdvertiser ?: run { onError("This phone cannot advertise over BLE"); return }
         stopAdvertising()
         val settings = AdvertiseSettings.Builder()
@@ -201,14 +201,15 @@ class BleTransport(
     private val timeout = Runnable { finish(false) }
 
     /** Queue a frame for [device]; [cb] runs on the engine thread with true if the write was acknowledged. */
-    fun send(device: BluetoothDevice, bytes: ByteArray, cb: (Boolean) -> Unit) {
+    override fun send(peer: Any, bytes: ByteArray, cb: (Boolean) -> Unit) {
+        val device = peer as? BluetoothDevice ?: run { cb(false); return }
         handler.post {
             queue.addLast(Outgoing(device, bytes, 0, cb))
             pump()
         }
     }
 
-    val queueSize: Int get() = queue.size + if (current != null) 1 else 0
+    override val queueSize: Int get() = queue.size + if (current != null) 1 else 0
 
     private fun pump() {
         if (current != null || queue.isEmpty()) return
