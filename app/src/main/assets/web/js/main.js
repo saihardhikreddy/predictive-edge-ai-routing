@@ -200,7 +200,10 @@ function readable(text) {
   return `Emergency: ${parts.join(", ") || "help needed"}${m[2] ? `, ${m[2]} people` : ""}`;
 }
 const pct = (x) => `${Math.round((x || 0) * 100)}%`;
-const rangeLabel = (v) => (v <= -99 ? "Off" : `Stronger than ${v} dBm`);
+/* RSSI in dBm: received Bluetooth signal power, always negative; closer to 0 = stronger.
+   Roughly -40 is right next to you, -60 the same room, -80 a wall or two away, -90 the edge of range. */
+const signalWord = (rssi) => (rssi >= -60 ? "Strong" : rssi >= -72 ? "Good" : rssi >= -82 ? "Fair" : "Weak");
+const rangeLabel = (v) => (v <= -99 ? "Off" : `${signalWord(v)} or better (${v} dBm)`);
 const modeName = (m) => (m === "F" ? "flooding" : "learned route");
 
 function render(force) {
@@ -228,7 +231,7 @@ function render(force) {
     return {
       key: n.id,
       innerAttrs: { "data-id": n.id, "aria-pressed": String(n.id === selected) },
-      html: `<span class="dot ${cls}"></span><span><span class="name">${esc(n.nick || n.id)}</span><span class="sub">${esc(sub)}</span></span><span class="num">${n.rssi} dBm</span>`,
+      html: `<span class="dot ${cls}"></span><span><span class="name">${esc(n.nick || n.id)}</span><span class="sub">${esc(sub)}</span></span><span class="num"><b>${signalWord(n.rssi)}</b> ${n.rssi} dBm</span>`,
     };
   }), `<li class="empty">${S.running ? "No phones heard yet." : "Start the mesh to look for phones."}</li>`, `<button type="button"></button>`);
   const sel = ns.find((n) => n.id === selected);
@@ -236,7 +239,7 @@ function render(force) {
   insp.hidden = !sel;
   if (sel) {
     put("inspector", `<h3>${esc(sel.nick || sel.id)}</h3><p class="hint">${sel.present ? "In direct reach" : "Out of direct reach"}${sel.quarantined ? ", cut out of routes" : ""}</p>
-      <dl class="facts"><div><dt>Signal</dt><dd>${sel.rssi} dBm</dd></div><div><dt>Link quality</dt><dd>${pct(sel.linkQ)}</dd></div><div><dt>Battery</dt><dd>${sel.battery}%</dd></div>
+      <dl class="facts"><div><dt>Signal</dt><dd>${signalWord(sel.rssi)}, ${sel.rssi} dBm</dd></div><div><dt>Link quality</dt><dd>${pct(sel.linkQ)}</dd></div><div><dt>Battery</dt><dd>${sel.battery}%</dd></div>
       <div><dt>Reputation</dt><dd>${pct(sel.reputation)}</dd></div><div><dt>Suspicion</dt><dd>${pct(sel.anomaly)}</dd></div><div><dt>Id</dt><dd>${esc(sel.id.slice(0, 4))}</dd></div></dl>
       <div class="row-actions"><button class="btn" type="button" data-block="${esc(sel.id)}">${sel.blocked ? "Unblock" : "Block this phone"}</button><button class="btn" type="button" data-message="${esc(sel.id)}">Message</button></div>`);
   }

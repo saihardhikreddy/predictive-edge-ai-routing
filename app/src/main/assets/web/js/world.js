@@ -719,7 +719,7 @@ export function createWorld(canvas, { onSelect, onFirstFrame, reducedMotion = fa
       const el = tagFor(id);
       if (n.alpha < 0.08) { el.style.opacity = "0"; continue; }
       const d = n.data || {};
-      const sub = n.kind === "far" ? (d.hops > 1 ? `${d.hops} hops away` : "via mesh") : d.quarantined ? "cut off" : d.present && !d.blocked ? `${d.rssi} dBm` : d.blocked ? "blocked" : "out of range";
+      const sub = n.kind === "far" ? (d.hops > 1 ? `${d.hops} hops away` : "via mesh") : d.quarantined ? "cut off" : d.present && !d.blocked ? `${d.rssi >= -60 ? "strong" : d.rssi >= -72 ? "good" : d.rssi >= -82 ? "fair" : "weak"} signal` : d.blocked ? "blocked" : "out of range";
       const cls = d.quarantined ? "bad" : n.kind === "far" || !d.present || d.blocked ? "away" : "";
       tmpV.set(n.pos.x, HEIGHT + 0.5, n.pos.z);
       placeTag(el, tmpV.clone(), `<b>${esc(d.nick || id)}</b><small>${esc(sub)}</small>`, cls, hideBelow);
