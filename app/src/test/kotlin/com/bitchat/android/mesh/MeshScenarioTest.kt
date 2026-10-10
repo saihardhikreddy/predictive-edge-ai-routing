@@ -240,16 +240,22 @@ class MeshScenarioTest {
         run(40.0)
         phones.getValue("B").setSinkhole(true)
         run(2.0)
-        repeat(16) { i -> phones.getValue("A").send(id("C"), "message $i"); run(4.0) }
-        run(90.0)
-        val ms = sent("A", "C")
-        val delivered = ms.count { it.status == "delivered" }
+        val t0 = SystemClock.uptimeMillis()
+        // phase 1: the attack. B lies that it is next to everyone and swallows what it gets
+        repeat(12) { i -> phones.getValue("A").send(id("C"), "attack phase $i"); run(4.0) }
+        run(30.0)
+        val phase1 = sent("A", "C")
         val bQuarantined = st("A").neighbors.first { it.id == id("B") }.quarantined
-        println("sinkhole scenario: delivered $delivered/${ms.size}, B quarantined by A = $bQuarantined")
-        assertTrue("A should cut the attacker out (delivered $delivered/16)", bQuarantined)
-        // once B is cut out, later messages go through D
-        assertTrue("the last messages should get through D: ${ms.takeLast(4).joinToString { describe(it) }}",
-            ms.takeLast(4).all { it.status == "delivered" })
+        val lost = phase1.count { it.status != "delivered" }
+        println("sinkhole scenario: attack phase delivered ${phase1.size - lost}/${phase1.size}, B quarantined by A = $bQuarantined after <= ${(SystemClock.uptimeMillis() - t0) / 1000}s")
+        assertTrue("A should cut the attacker out", bQuarantined)
+        // phase 2: after the quarantine, everything goes through the honest relay D
+        repeat(6) { i -> phones.getValue("A").send(id("C"), "after quarantine $i"); run(3.0) }
+        run(25.0)
+        val phase2 = sent("A", "C").drop(phase1.size)
+        println("sinkhole scenario: after quarantine delivered ${phase2.count { it.status == "delivered" }}/${phase2.size}")
+        assertTrue("after the quarantine messages should get through D: ${phase2.joinToString { describe(it) }}",
+            phase2.all { it.status == "delivered" && it.hops == 2 })
     }
 
     @Test
