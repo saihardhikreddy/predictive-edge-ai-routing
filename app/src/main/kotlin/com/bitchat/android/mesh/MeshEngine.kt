@@ -44,6 +44,11 @@ class MeshEngine(
 
     // ------------------------------------------------------------ identity
 
+    companion object {
+        /** How long a relay has to prove it passed a message on before it counts against it. */
+        const val WATCH_MS = 15_000L
+    }
+
     private val handler = Handler(looper ?: HandlerThread("mesh-engine").apply { start() }.looper)
     private val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
 
@@ -488,7 +493,8 @@ class MeshEngine(
             if (ok) {
                 store.remove(s)
                 pendingTd[d.key] = features to bytes
-                if (y != d.dst) watches[d.key] = y to now() + 30_000
+                // 2-hop ACK deadline: an honest relay in range forwards within a few seconds
+                if (y != d.dst) watches[d.key] = y to now() + WATCH_MS
                 s.receivedFrom?.let { prev -> sendFrame(prev, Frame.FwdAck(d.msgId, d.copy, myId)) {} }
                 store.filter { it.data.msgId == d.msgId }.forEach { it.avoid.add(y) }
             } else {
