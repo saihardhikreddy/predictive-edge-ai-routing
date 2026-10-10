@@ -46,6 +46,12 @@ android {
     androidResources {
         noCompress += listOf("woff2", "js")
     }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all { it.testLogging { events("passed", "failed"); showStandardStreams = true; exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL } }
+        }
+    }
     lint {
         abortOnError = false
         checkReleaseBuilds = false
@@ -58,4 +64,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.webkit)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }
