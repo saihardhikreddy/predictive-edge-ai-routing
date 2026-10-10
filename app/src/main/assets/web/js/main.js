@@ -2,6 +2,10 @@ import { createWorld } from "./world.js";
 import { createDemoEngine } from "./demo.js";
 
 const $ = (id) => document.getElementById(id);
+// collected for the automated emulator test (read through DevTools)
+window.__errors = [];
+addEventListener("error", (e) => window.__errors.push(String(e.message || e)));
+addEventListener("unhandledrejection", (e) => window.__errors.push(String(e.reason)));
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 

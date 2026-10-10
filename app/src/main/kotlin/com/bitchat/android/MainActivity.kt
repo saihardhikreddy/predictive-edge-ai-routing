@@ -76,6 +76,8 @@ class MainActivity : ComponentActivity() {
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .build()
 
+        // debug builds only: lets the emulator test drive the page through Chrome DevTools
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) WebView.setWebContentsDebuggingEnabled(true)
         web = WebView(this).apply {
             setBackgroundColor(Color.parseColor("#070A10"))
             settings.javaScriptEnabled = true
