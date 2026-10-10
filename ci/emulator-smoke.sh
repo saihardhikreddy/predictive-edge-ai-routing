@@ -1,91 +1,85 @@
 #!/usr/bin/env bash
-# Runs the real APK on an Android emulator: launch, enter a name, restart, check the name
-# card stays away, start the mesh, and look for crashes. Screenshots go to emu/.
+# Runs the real APK on an Android emulator and drives the 3D page through Chrome DevTools:
+# first-launch name card, saving a name, restart (name must be remembered), Start, every
+# chapter, and crash / JavaScript-error checks. Screenshots go to emu/.
 set -u
 PKG=edu.amrita.team8.meshtestbed
 ACT=com.bitchat.android.MainActivity
 OUT=emu
 mkdir -p "$OUT"
+pip install -q websocket-client >/dev/null 2>&1 || pip install -q --break-system-packages websocket-client >/dev/null 2>&1
 fail=0
 note() { echo "::notice title=Emulator::$1"; }
 err() { echo "::error title=Emulator::$1"; fail=1; }
 shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
-# tap the centre of the first UI node whose text/hint/content-desc contains $1
-tap_text() {
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
-  adb pull /sdcard/ui.xml "$OUT/ui.xml" >/dev/null 2>&1
-  xy=$(python3 - "$1" "$OUT/ui.xml" <<'PY'
-import re, sys, xml.etree.ElementTree as ET
-want, path = sys.argv[1].lower(), sys.argv[2]
-try:
-    root = ET.parse(path).getroot()
-except Exception:
-    sys.exit(0)
-for n in root.iter("node"):
-    hay = " ".join(n.get(k, "") for k in ("text", "hint", "content-desc")).lower()
-    if want in hay:
-        x1, y1, x2, y2 = map(int, re.findall(r"\d+", n.get("bounds", "")))
-        print((x1 + x2) // 2, (y1 + y2) // 2)
-        break
-PY
-)
-  if [ -n "$xy" ]; then adb shell input tap $xy; return 0; fi
-  return 1
+js() { python3 ci/webview.py "$1" 2>&1; }
+attach() {
+  pid=""
+  for _ in $(seq 1 20); do pid=$(adb shell pidof $PKG | tr -d '\r'); [ -n "$pid" ] && break; sleep 1; done
+  [ -n "$pid" ] || { err "app is not running"; return 1; }
+  adb forward --remove-all >/dev/null 2>&1
+  adb forward tcp:9222 localabstract:webview_devtools_remote_$pid >/dev/null
+  for _ in $(seq 1 30); do [ "$(js 'document.body.classList.contains("ready")')" = "true" ] && return 0; sleep 1; done
+  err "3D page did not finish loading"; return 1
 }
-ui_has() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/ui.xml" >/dev/null 2>&1; grep -qi "$1" "$OUT/ui.xml"; }
+launch() { adb shell am start -W -n $PKG/$ACT >/dev/null; sleep 8; attach; }
 
 adb install -r apk/app-debug.apk || err "install failed"
 for p in BLUETOOTH_SCAN BLUETOOTH_CONNECT BLUETOOTH_ADVERTISE; do adb shell pm grant $PKG android.permission.$p 2>/dev/null; done
 adb logcat -c
 
-# 1. first launch: the name card must appear
-adb shell am start -W -n $PKG/$ACT >/dev/null
-sleep 30
+# 1. first launch must ask for a name
+launch
+sleep 3
 shot 1_first_launch
-pid=$(adb shell pidof $PKG | tr -d '\r')
-if [ -n "$pid" ]; then note "app is running after first launch"; else err "app is not running after launch"; fi
-if ui_has "What should your friends see"; then note "first launch asks for a name"; else err "first launch did not show the name card"; fi
+v=$(js '!document.getElementById("namecard").hidden')
+[ "$v" = "true" ] && note "first launch asks for a name" || err "first launch did not show the name card ($v)"
 
-# 2. enter a name
-tap_text "your name" || err "could not find the name field"
-sleep 1
-adb shell input text "Hardhik"
-sleep 1
-tap_text "save name" || adb shell input keyevent 66
-sleep 4
+# 2. type a name and save, the way a user would
+js 'const i=document.getElementById("nc-input"); i.focus(); i.value="Hardhik"; document.querySelector("#nc-form button[type=submit]").click(); "ok"' >/dev/null
+sleep 3
 shot 2_after_name
+v=$(js 'document.getElementById("namecard").hidden && document.getElementById("pill-name").textContent')
+[ "$v" = '"Hardhik"' ] && note "name card closed and the top shows Hardhik" || err "after saving, top shows $v"
 prefs=$(adb shell run-as $PKG cat shared_prefs/mesh.xml 2>/dev/null | tr -d '\r')
-if echo "$prefs" | grep -q "Hardhik"; then note "name saved to storage"; else err "name not saved: $prefs"; fi
+echo "$prefs" | grep -q "Hardhik" && note "name saved to storage" || err "name not in storage: $prefs"
 
-# 3. close and reopen: the name card must NOT come back
+# 3. close the app completely and open it again: the name card must stay away
 adb shell am force-stop $PKG
 sleep 2
-adb shell am start -W -n $PKG/$ACT >/dev/null
-sleep 25
+launch
+sleep 4
 shot 3_after_restart
-if ui_has "What should your friends see"; then err "name card shown again after restart"; else note "name remembered after restart (no name card)"; fi
-if ui_has "Hardhik"; then note "top pill shows the saved name"; else err "saved name not shown after restart"; fi
+v=$(js 'JSON.stringify({card: !document.getElementById("namecard").hidden, name: document.getElementById("pill-name").textContent})')
+echo "after restart: $v"
+echo "$v" | grep -q '\\"card\\":false' && note "name remembered after restart (no name card)" || err "name card came back after restart: $v"
+echo "$v" | grep -q 'Hardhik' && note "top shows the saved name after restart" || err "saved name missing after restart: $v"
 
-# 4. start the mesh and visit each chapter
-tap_text "start" || err "could not find Start"
-sleep 6
-shot 4_started
-for ch in Send Route Defend Lab Mesh; do
-  tap_text "$ch" && sleep 4 && shot "5_${ch}"
+# 4. press Start
+js 'document.getElementById("power").click(); "ok"' >/dev/null
+sleep 8
+shot 4_after_start
+v=$(js 'document.getElementById("pill-sub").textContent + " | button: " + document.getElementById("power").textContent')
+note "after pressing Start the top says: $v"
+
+# 5. every chapter
+for ch in send route defend lab mesh; do
+  js "document.querySelector('.nav button[data-goto=$ch]').click(); 'ok'" >/dev/null
+  sleep 4
+  shot "5_$ch"
+  v=$(js "document.body.dataset.chapter")
+  [ "$v" = "\"$ch\"" ] || err "chapter $ch did not open ($v)"
 done
+note "visited all five chapters"
 
-# 5. crashes and page errors
+# 6. errors and crashes
+v=$(js 'JSON.stringify(window.__errors || [])')
+[ "$v" = '"[]"' ] && note "no JavaScript errors in the page" || err "JavaScript errors: $v"
 adb logcat -d > "$OUT/logcat.txt"
-if grep -q "FATAL EXCEPTION" "$OUT/logcat.txt"; then
-  err "app crashed: $(grep -A8 'FATAL EXCEPTION' "$OUT/logcat.txt" | head -12 | tr '\n' ' ')"
+if grep -A3 "FATAL EXCEPTION" "$OUT/logcat.txt" | grep -q "Process: $PKG"; then
+  err "app crashed: $(grep -A10 'FATAL EXCEPTION' "$OUT/logcat.txt" | grep -A8 "Process: $PKG" | head -10 | tr '\n' ' ')"
 else
-  note "no crashes in logcat"
+  note "no app crashes in logcat"
 fi
-if grep -i "chromium" "$OUT/logcat.txt" | grep -qi "Uncaught"; then
-  err "JavaScript error: $(grep -i chromium "$OUT/logcat.txt" | grep -i Uncaught | head -3 | tr '\n' ' ')"
-else
-  note "no JavaScript errors in the 3D UI"
-fi
-pid=$(adb shell pidof $PKG | tr -d '\r')
-if [ -n "$pid" ]; then note "app still running at the end"; else err "app died during the test"; fi
+[ -n "$(adb shell pidof $PKG | tr -d '\r')" ] && note "app still running at the end" || err "app died during the test"
 exit $fail
