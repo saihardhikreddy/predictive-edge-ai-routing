@@ -165,6 +165,9 @@ class MainActivity : ComponentActivity() {
                 "resetStats" -> engine.resetStats()
                 "clearTrust" -> engine.clearTrust()
                 "exportLog" -> return engine.exportLog()
+                "info" -> return JSONObject()
+                    .put("version", try { packageManager.getPackageInfo(packageName, 0).versionName } catch (_: Exception) { "?" })
+                    .put("id", engine.myId).toString()
                 "shareLog" -> { val csv = engine.csvText(); runOnUiThread { share(csv) }; return "" }
                 else -> return JSONObject().put("error", "unknown action $name").toString()
             }
