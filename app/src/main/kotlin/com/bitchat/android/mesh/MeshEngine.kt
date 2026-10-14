@@ -53,7 +53,7 @@ class MeshEngine(
     private val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
 
     val myId: String = prefs.getString("id", null) ?: String.format(Locale.US, "%08X", Random.nextInt()).also {
-        prefs.edit().putString("id", it).apply()
+        prefs.edit().putString("id", it).commit()
     }
     private var nick: String = prefs.getString("nick", null) ?: "Phone-${myId.take(4)}"
     private var nickSet: Boolean = prefs.contains("nick")
@@ -105,6 +105,7 @@ class MeshEngine(
     private val neighbors = HashMap<String, Neighbor>()
     /** id -> profile name ("" until the name has reached us). */
     private val known = LinkedHashMap<String, String>()
+    init { loadNames() }
 
     /** Best route learned from name announcements: [hops] away, first hop [via]. */
     private class Route(var hops: Int, var via: String, var heardAt: Long)
@@ -193,7 +194,8 @@ class MeshEngine(
         if (clean.isEmpty()) return@post
         nick = clean
         nickSet = true
-        prefs.edit().putString("nick", nick).apply()
+        // commit() writes to disk before returning, so the name survives even if the app is killed right after
+        prefs.edit().putString("nick", nick).commit()
         log.write("NICK", value = nick)
         lastAnnounce = 0L // tell the mesh the new name on the next tick
         publish()
@@ -347,6 +349,23 @@ class MeshEngine(
 
     // ------------------------------------------------------------ names
 
+    /** Friends' names are kept across restarts, so contacts show by name straight away. */
+    private fun rememberName(id: String, name: String) {
+        if (known[id] == name) return
+        known[id] = name
+        val o = org.json.JSONObject()
+        known.forEach { (k, v) -> if (v.isNotBlank()) o.put(k, v) }
+        prefs.edit().putString("names", o.toString()).apply()
+    }
+
+    private fun loadNames() {
+        val raw = prefs.getString("names", null) ?: return
+        try {
+            val o = org.json.JSONObject(raw)
+            o.keys().forEach { k -> if (k != myId) known[k] = o.getString(k) }
+        } catch (_: Exception) {}
+    }
+
     fun nameOf(id: String): String = known[id]?.takeIf { it.isNotBlank() } ?: "Unknown phone ${id.take(4)}"
 
     /** Flood "I exist, my name is …" (TTL 7). */
@@ -362,7 +381,7 @@ class MeshEngine(
         if (a.src == myId || !seen.add("N:${a.src}:${a.seq}")) return
         val t = now()
         if (a.nick.isNotBlank() && known[a.src] != a.nick) {
-            known[a.src] = a.nick
+            rememberName(a.src, a.nick)
             log.write("NAME", peer = a.src, value = a.nick)
         } else known.putIfAbsent(a.src, "")
         val h = a.hops + 1
@@ -529,7 +548,7 @@ class MeshEngine(
     }
 
     private fun onHello(h: Frame.Hello) {
-        if (h.nick.isNotBlank()) known[h.src] = h.nick else known.putIfAbsent(h.src, "")
+        if (h.nick.isNotBlank()) rememberName(h.src, h.nick) else known.putIfAbsent(h.src, "")
         neighbors[h.src]?.let { it.nick = h.nick; it.p = h.p }
         router.onEncounter(h.src, h.p)
         log.write("HELLO_RX", peer = h.src, value = "reply=${h.reply};model=${h.w != null}")
@@ -545,7 +564,7 @@ class MeshEngine(
 
     private fun onData(d: Frame.Data, size: Int) {
         val sender = d.path.lastOrNull() ?: d.src
-        if (d.srcName.isNotBlank()) known[d.src] = d.srcName else known.putIfAbsent(d.src, "")
+        if (d.srcName.isNotBlank()) rememberName(d.src, d.srcName) else known.putIfAbsent(d.src, "")
         if (d.mode == Protocol.MODE_FLOOD) {
             if (!seen.add(d.msgId)) { log.write("DUP", mode = d.mode, msg = d.msgId, peer = sender); return }
             log.write("RX", mode = d.mode, msg = d.msgId, src = d.src, dst = d.dst, peer = sender, hops = d.path.size, bytes = size)
