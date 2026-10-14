@@ -213,6 +213,21 @@ class MeshScenarioTest {
     }
 
     @Test
+    fun friendsNames_areRememberedAfterRestart() {
+        val a = MeshEngine(ctx, Looper.getMainLooper(), { SystemClock.uptimeMillis() }, { 80 }, air.factory("A"), "mesh_friends")
+        air.radio("A").x = 0.0
+        a.setNick("Hardhik"); a.start()
+        phone("Priya", 3.0)
+        run(40.0)
+        val priya = id("Priya")
+        assertEquals("Priya", a.state.value.known.first { it.id == priya }.name)
+        a.stop()
+        // reopen: Priya is not around yet, but her name is already known
+        val again = MeshEngine(ctx, Looper.getMainLooper(), { SystemClock.uptimeMillis() }, { 80 }, air.factory("A2"), "mesh_friends")
+        assertEquals("Priya", again.nameOf(priya))
+    }
+
+    @Test
     fun name_changeReachesFarPhones() {
         phone("A", 0.0); phone("B", 10.0); phone("C", 20.0)
         run(40.0)
