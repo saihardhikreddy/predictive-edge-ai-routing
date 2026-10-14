@@ -81,7 +81,18 @@ applySheet();
 /* ─── controls ─── */
 const call = (name, ...args) => engine.call(name, args);
 $("power").addEventListener("click", () => call(S?.running ? "stop" : "start"));
-/* profile name: asked once on first launch, editable from the top pill */
+/* build number, so it is easy to check which APK a phone is running */
+let appInfo = {};
+try { appInfo = JSON.parse(engine.call("info") || "{}"); } catch { appInfo = {}; }
+const buildText = appInfo.version ? `Mesh Testbed build ${appInfo.version}` : "Mesh Testbed (browser demo)";
+$("nc-build").textContent = buildText;
+$("lab-build").textContent = buildText;
+
+/* profile name: asked once on first launch, editable from the top pill.
+   A second copy lives in page storage; if the app's own copy is ever missing, it is restored
+   from there instead of asking again. */
+const savedName = () => { try { return localStorage.getItem("meshNick"); } catch { return null; } };
+const keepName = (n) => { try { localStorage.setItem("meshNick", n); } catch {} };
 let nameAsked = false;
 function openName(required) {
   $("nc-input").value = required ? "" : (S?.nick || "");
@@ -96,6 +107,7 @@ $("nc-form").addEventListener("submit", (e) => {
   const n = $("nc-input").value.trim();
   if (!n) return;
   call("setNick", n);
+  keepName(n);
   $("namecard").hidden = true;
   toast(`You will appear as ${n} on every phone in the mesh`);
 });
@@ -147,7 +159,13 @@ let S = null;
 let lastSeq = -1;
 function onState(s) {
   S = s;
-  if (!nameAsked && s.nickSet === false) { nameAsked = true; openName(true); }
+  if (s.nickSet && s.nick) keepName(s.nick);
+  if (!nameAsked && s.nickSet === false) {
+    nameAsked = true;
+    const n = savedName();
+    if (n) call("setNick", n); // restore silently
+    else openName(true);
+  }
   world?.setState(s);
   world?.handleEvents(s.events);
   for (const e of s.events || []) {

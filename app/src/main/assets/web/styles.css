@@ -282,3 +282,4 @@ body[data-chapter="defend"] .nav button[aria-current="page"] svg { stroke: var(-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+.hint.build { margin-top: 10px; font-size: 11px; opacity: .7; font-variant-numeric: tabular-nums; }
