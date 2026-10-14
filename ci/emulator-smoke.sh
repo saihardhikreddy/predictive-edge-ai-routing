@@ -15,11 +15,15 @@ shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
 js() { python3 ci/webview.py "$1" 2>&1; }
 attach() {
   pid=""
-  for _ in $(seq 1 20); do pid=$(adb shell pidof $PKG | tr -d '\r'); [ -n "$pid" ] && break; sleep 1; done
+  for t in $(seq 1 60); do
+    pid=$(adb shell pidof $PKG | tr -d '\r'); [ -n "$pid" ] && break
+    [ "$t" = 20 ] && adb shell am start -n $PKG/$ACT >/dev/null 2>&1   # slow cold boot: ask once more
+    sleep 1
+  done
   [ -n "$pid" ] || { err "app is not running"; return 1; }
   adb forward --remove-all >/dev/null 2>&1
   adb forward tcp:9222 localabstract:webview_devtools_remote_$pid >/dev/null
-  for _ in $(seq 1 30); do [ "$(js 'document.body.classList.contains("ready")')" = "true" ] && return 0; sleep 1; done
+  for _ in $(seq 1 60); do [ "$(js 'document.body.classList.contains("ready")')" = "true" ] && return 0; sleep 1; done
   err "3D page did not finish loading"; return 1
 }
 launch() { adb shell am start -W -n $PKG/$ACT >/dev/null; sleep 8; attach; }
