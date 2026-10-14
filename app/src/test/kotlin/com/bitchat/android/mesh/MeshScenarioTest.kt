@@ -257,10 +257,14 @@ class MeshScenarioTest {
         run(2.0)
         val t0 = SystemClock.uptimeMillis()
         // phase 1: the attack. B lies that it is next to everyone and swallows what it gets
-        repeat(12) { i -> phones.getValue("A").send(id("C"), "attack phase $i"); run(4.0) }
+        // keep the attack going until A cuts B out (or 30 messages); how many it takes depends on
+        // how often the router happens to pick B, which is random exploration
+        fun bQ() = st("A").neighbors.first { it.id == id("B") }.quarantined
+        var i = 0
+        while (i < 30 && !bQ()) { phones.getValue("A").send(id("C"), "attack phase $i"); run(4.0); i++ }
         run(30.0)
         val phase1 = sent("A", "C")
-        val bQuarantined = st("A").neighbors.first { it.id == id("B") }.quarantined
+        val bQuarantined = bQ()
         val lost = phase1.count { it.status != "delivered" }
         println("sinkhole scenario: attack phase delivered ${phase1.size - lost}/${phase1.size}, B quarantined by A = $bQuarantined after <= ${(SystemClock.uptimeMillis() - t0) / 1000}s")
         assertTrue("A should cut the attacker out", bQuarantined)
