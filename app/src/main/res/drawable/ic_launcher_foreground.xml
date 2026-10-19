@@ -1,0 +1,8 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+  <!-- three phones in a mesh around your lantern -->
+  <path android:pathData="M54,28.5 L76.08,66.75 L31.92,66.75 Z" android:strokeColor="#615EE6C8" android:strokeWidth="2.2" android:strokeLineJoin="round"/>
+  <path android:pathData="M54,54 L54,28.5 M54,54 L76.08,66.75 M54,54 L31.92,66.75" android:strokeColor="#5EE6C8" android:strokeWidth="3" android:strokeLineCap="round"/>
+  <path android:pathData="M40.5,54 a13.5,13.5 0 1,0 27,0 a13.5,13.5 0 1,0 -27,0 Z" android:fillColor="#070A10" android:strokeColor="#73FFB547" android:strokeWidth="1.8"/>
+  <path android:pathData="M48,28.5 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0 Z M70.08,66.75 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0 Z M25.92,66.75 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0 Z" android:fillColor="#5EE6C8"/>
+  <path android:pathData="M45.2,54 a8.8,8.8 0 1,0 17.6,0 a8.8,8.8 0 1,0 -17.6,0 Z" android:fillColor="#FFB547"/>
+</vector>
