@@ -26,6 +26,7 @@ export const SHOTS = {
   send:   { cam: [-8, 4.5, 11],  tgt: [3, 1.5, -2],  ctl: [-19, 12, 4],  fov: 52, drift: 0.02,  fx: { bloom: 1.05, exposure: 1.1, warm: 0.55 } },
   route:  { cam: [15, 6, 11],    tgt: [-4, 1.4, -4], ctl: [24, 9, -8],   fov: 48, drift: 0.025, fx: { bloom: 1.0, exposure: 1.05, warm: 0.3 } },
   defend: { cam: [7, 7.5, 12],   tgt: [0, 1.3, 0],   ctl: [-12, 17, 13], fov: 44, drift: 0.03,  fx: { bloom: 1.1, exposure: 0.95, warm: 0.12 } },
+  guide:  { cam: [-20, 30, 34],  tgt: [0, 0, 0],     ctl: [-34, 44, 6],  fov: 38, drift: 0.04,  fx: { bloom: 0.8, exposure: 0.72, warm: 0.5 } },
   lab:    { cam: [0.01, 70, 0.6], tgt: [0, 0, 0],     ctl: [-30, 40, 30], fov: 34, drift: 0.015, fx: { bloom: 0.75, exposure: 0.8, warm: 0.3 } },
 };
 
@@ -764,6 +765,13 @@ export function createWorld(canvas, { onSelect, onFirstFrame, reducedMotion = fa
     handleEvents,
     setChapter,
     setViewInset(px) { viewInset = px; },
+    /** your lantern lights up: used when a name is saved */
+    pulse() {
+      const o = new THREE.Vector3();
+      ring(o, COL.lantern, { to: 4, dur: 1.0, width: 1.4 });
+      setTimeout(() => ring(o, COL.lantern, { to: 12, dur: 1.8 }), 180);
+      setTimeout(() => ring(o, COL.lantern, { to: 26, dur: 2.6 }), 420);
+    },
     get chapter() { return chapter; },
     debug: { camera, cur, move, orbit, endpoint: () => endpoint(), nodes, get suspect() { return suspect; } },
   };
