@@ -28,7 +28,10 @@ setTimeout(boot, 4000);
 /* ─── chapters ─── */
 let chapter = "mesh";
 let selected = null;
+let readFrac = null; // the guide opens the panel tall for reading, then puts it back
 function goTo(name) {
+  if (name === "guide" && chapter !== "guide") { readFrac = sheetFrac; sheetFrac = 0.8; applySheet(); }
+  else if (name !== "guide" && chapter === "guide" && readFrac != null) { sheetFrac = readFrac; readFrac = null; applySheet(); }
   chapter = name;
   document.body.dataset.chapter = name;
   document.querySelectorAll(".nav button").forEach((b) => b.toggleAttribute("aria-current", b.dataset.goto === name));
@@ -39,7 +42,7 @@ function goTo(name) {
   $("sheet-body").scrollTop = 0;
   render(true);
 }
-document.querySelectorAll(".nav button").forEach((b) => b.addEventListener("click", () => goTo(b.dataset.goto)));
+document.querySelectorAll(".nav button, .screens button").forEach((b) => b.addEventListener("click", () => goTo(b.dataset.goto)));
 
 function select(id) {
   if (chapter !== "mesh") { if (!id) return; goTo("mesh"); }
@@ -87,6 +90,34 @@ try { appInfo = JSON.parse(engine.call("info") || "{}"); } catch { appInfo = {};
 const buildText = appInfo.version ? `Mesh Testbed build ${appInfo.version}` : "Mesh Testbed (browser demo)";
 $("nc-build").textContent = buildText;
 $("lab-build").textContent = buildText;
+$("g-build").textContent = appInfo.version ? `build ${appInfo.version}` : "the browser demo";
+
+/* ─── guide: jump links and a test checklist that stays on this phone ─── */
+document.querySelectorAll(".toc a").forEach((a) => a.addEventListener("click", (e) => {
+  e.preventDefault();
+  document.querySelector(a.getAttribute("href"))?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+}));
+const TESTS = [...document.querySelectorAll(".test")];
+let ticks = {};
+try { ticks = JSON.parse(localStorage.getItem("guideTicks") || "{}"); } catch { ticks = {}; }
+function paintTicks() {
+  let n = 0;
+  for (const t of TESTS) {
+    const on = !!ticks[t.dataset.test];
+    t.classList.toggle("done", on);
+    t.querySelector(".tick input").checked = on;
+    n += on;
+  }
+  $("g-count").textContent = n === TESTS.length ? `All ${n} tests passed` : `${n} of ${TESTS.length} done`;
+  $("g-bar").style.width = `${(n / TESTS.length) * 100}%`;
+}
+TESTS.forEach((t) => t.querySelector(".tick input").addEventListener("change", (e) => {
+  ticks[t.dataset.test] = e.target.checked;
+  try { localStorage.setItem("guideTicks", JSON.stringify(ticks)); } catch {}
+  paintTicks();
+}));
+$("g-clear").addEventListener("click", () => { ticks = {}; try { localStorage.removeItem("guideTicks"); } catch {} paintTicks(); });
+paintTicks();
 
 /* profile name: asked once on first launch, editable from the top pill.
    A second copy lives in page storage; if the app's own copy is ever missing, it is restored
@@ -94,8 +125,22 @@ $("lab-build").textContent = buildText;
 const savedName = () => { try { return localStorage.getItem("meshNick"); } catch { return null; } };
 const keepName = (n) => { try { localStorage.setItem("meshNick", n); } catch {} };
 let nameAsked = false;
+function previewName() {
+  const v = $("nc-input").value.trim();
+  $("nc-preview").textContent = v || "Your name";
+  $("nc-preview").parentElement.classList.toggle("empty", !v);
+}
+$("nc-input").addEventListener("input", () => {
+  previewName();
+  const tag = $("nc-preview").parentElement;
+  tag.classList.add("pop");
+  clearTimeout(tag._t);
+  tag._t = setTimeout(() => tag.classList.remove("pop"), 120);
+});
 function openName(required) {
+  document.body.classList.remove("lit");
   $("nc-input").value = required ? "" : (S?.nick || "");
+  previewName();
   $("nc-cancel").hidden = required;
   $("namecard").hidden = false;
   setTimeout(() => $("nc-input").focus(), 50);
@@ -108,8 +153,10 @@ $("nc-form").addEventListener("submit", (e) => {
   if (!n) return;
   call("setNick", n);
   keepName(n);
-  $("namecard").hidden = true;
-  toast(`You will appear as ${n} on every phone in the mesh`);
+  world?.pulse();
+  document.body.classList.add("lit");
+  setTimeout(() => { $("namecard").hidden = true; document.body.classList.remove("lit"); }, reduced ? 0 : 560);
+  toast(`You will appear as ${n} on every phone in the mesh`, "ok");
 });
 document.querySelectorAll(".segmented button").forEach((b) => b.addEventListener("click", () => call("setMode", b.dataset.mode)));
 $("triage").addEventListener("change", (e) => call("setTriage", e.target.checked));
@@ -146,9 +193,10 @@ $("share").addEventListener("click", () => { const r = call("shareLog"); if (r) 
 $("reset").addEventListener("click", () => call("resetStats"));
 
 let toastT = 0;
-function toast(msg) {
+function toast(msg, kind = "") {
   const el = $("toast");
   el.textContent = msg;
+  el.className = `toast ${kind}`;
   el.hidden = false;
   clearTimeout(toastT);
   toastT = setTimeout(() => (el.hidden = true), 2600);
@@ -173,10 +221,10 @@ function onState(s) {
     lastSeq = e.seq;
     if (e.ev === "DELACK_RX") {
       const m = (s.messages || []).find((x) => x.id === e.msg);
-      if (m) toast(`Delivered to ${m.peerName} in ${m.hops} ${m.hops === 1 ? "hop" : "hops"}, ${(m.rttMs / 1000).toFixed(1)} s round trip`);
+      if (m) toast(`Delivered to ${m.peerName} in ${m.hops} ${m.hops === 1 ? "hop" : "hops"}, ${(m.rttMs / 1000).toFixed(1)} s round trip`, "ok");
     } else if (e.ev === "QUARANTINE") {
       const n = (s.neighbors || []).find((x) => x.id === e.peer);
-      toast(`${n?.nick || e.peer} kept dropping messages and was cut out of your routes`);
+      toast(`${n?.nick || e.peer} kept dropping messages and was cut out of your routes`, "bad");
     } else if (e.ev === "ERROR") toast(e.value);
   }
   render(false);
@@ -226,6 +274,8 @@ const pct = (x) => `${Math.round((x || 0) * 100)}%`;
    Roughly -40 is right next to you, -60 the same room, -80 a wall or two away, -90 the edge of range. */
 const signalWord = (rssi) => (rssi >= -60 ? "Strong" : rssi >= -72 ? "Good" : rssi >= -82 ? "Fair" : "Weak");
 const rangeLabel = (v) => (v <= -99 ? "Off" : `${signalWord(v)} or better (${v} dBm)`);
+/* one dot per phone on the path: you, each relay, the destination */
+const pips = (hops) => `<span class="pips" aria-hidden="true">${"<i></i>".repeat(Math.min(8, Math.max(1, hops || 1)) + 1)}</span>`;
 const modeName = (m) => (m === "F" ? "flooding" : "learned route");
 
 function render(force) {
@@ -288,8 +338,8 @@ function render(force) {
   keyed("thread", msgs.map((m) => {
     const sos = m.intent === "EMERGENCY_SOS";
     const meta = m.outgoing
-      ? (m.status === "delivered" ? `<span class="meta ok">Delivered in ${m.hops} ${m.hops === 1 ? "hop" : "hops"}, ${(m.rttMs / 1000).toFixed(1)} s round trip</span>` : `<span class="meta">On its way by ${modeName(m.mode)}</span>`)
-      : `<span class="meta">Arrived over ${m.hops} ${m.hops === 1 ? "hop" : "hops"}</span>`;
+      ? (m.status === "delivered" ? `<span class="meta ok">${pips(m.hops)}Delivered in ${m.hops} ${m.hops === 1 ? "hop" : "hops"}, ${(m.rttMs / 1000).toFixed(1)} s round trip</span>` : `<span class="meta">On its way by ${modeName(m.mode)}</span>`)
+      : `<span class="meta">${pips(m.hops)}Arrived over ${m.hops} ${m.hops === 1 ? "hop" : "hops"}</span>`;
     return { key: m.id + (m.outgoing ? ">" : "<"), attrs: { class: `msg ${m.outgoing ? "out" : "in"} ${sos ? "sos" : ""}` },
       html: `<span class="who">${m.outgoing ? "To" : "From"} ${esc(m.peerName)}${sos ? ", SOS" : ""}${m.note ? `, sent as ${esc(m.note)}` : ""}</span><p>${esc(readable(m.text))}</p>${!m.outgoing && m.text !== readable(m.text) ? `<span class="meta">Received as ${esc(m.text)}</span>` : ""}${meta}` };
   }), "");

@@ -116,6 +116,139 @@
         <p class="hint build" id="lab-build"></p>
       </div>
 
+      <!-- Guide -->
+      <div class="panel guide" data-panel="guide" hidden>
+        <h2 class="display display-sm">Field guide</h2>
+        <p class="lede">How to set the phones up, run every test, and show the results to someone else.</p>
+
+        <nav class="toc" aria-label="On this page">
+          <a href="#g-setup">Set up</a><a href="#g-screens">Screens</a><a href="#g-signal">Signal</a><a href="#g-tests">Test plan</a><a href="#g-demo">Five-minute demo</a><a href="#g-help">Problems</a><a href="#g-auto">Automated tests</a>
+        </nav>
+
+        <section class="g-sec" id="g-setup">
+          <h3 class="g-h">Set up each phone</h3>
+          <ol class="steps">
+            <li><b>Install the app.</b> Open the latest release on the phone, download <i>MeshTestbed.apk</i>, allow installs from your browser, and install. To update, install over the old app. Uninstalling first erases your saved name.</li>
+            <li><b>Check the build.</b> Every phone should run the same one. This phone runs <span class="build-inline" id="g-build">the browser demo</span>.</li>
+            <li><b>Give it a name.</b> Friends find you by this name, even when you are out of their range. Tap your name at the top to change it.</li>
+            <li><b>Press Start and allow Nearby devices.</b> On Android 11 or older, also switch Location on, because Android needs it to scan for Bluetooth.</li>
+            <li><b>Keep the screen on.</b> The app holds it awake. Android slows Bluetooth scanning for apps in the background.</li>
+          </ol>
+        </section>
+
+        <section class="g-sec" id="g-screens">
+          <h3 class="g-h">What each screen is for</h3>
+          <ul class="screens">
+            <li><button type="button" data-goto="mesh"><b>Mesh</b><span>Every phone you can hear, placed by signal strength. Tap one to see its link, battery and trust, or to block it.</span></button></li>
+            <li><button type="button" data-goto="send"><b>Send</b><span>Message anyone by name. Phones out of your range are listed under Through the mesh with their hop count.</span></button></li>
+            <li><button type="button" data-goto="route"><b>Route</b><span>Switch between learned routing and flooding, set a range limit, and watch what this phone has learned.</span></button></li>
+            <li><button type="button" data-goto="defend"><b>Defend</b><span>Trust in each neighbour. Turn this phone into an attacker to see the others catch it.</span></button></li>
+            <li><button type="button" data-goto="lab"><b>Lab</b><span>Run a burst of test messages, compare the two routing modes, and save the log as a CSV.</span></button></li>
+          </ul>
+        </section>
+
+        <section class="g-sec" id="g-signal">
+          <h3 class="g-h">Reading the signal</h3>
+          <p>Bluetooth signal is shown in dBm. It is always negative, and closer to zero means stronger.</p>
+          <figure class="scale" aria-label="Signal scale from -40 dBm, right next to you, to -90 dBm, edge of range">
+            <div class="scale-bar"></div>
+            <ol class="scale-marks">
+              <li style="--at:0%"><b>−40</b><span>Next to you</span></li>
+              <li style="--at:40%"><b>−60</b><span>Same room</span></li>
+              <li style="--at:80%"><b>−80</b><span>A wall away</span></li>
+              <li style="--at:100%"><b>−90</b><span>Edge of range</span></li>
+            </ol>
+          </figure>
+          <p class="hint">Words on screen follow the same scale: Strong is −60 or better, Good to −72, Fair to −82, and Weak below that.</p>
+        </section>
+
+        <section class="g-sec" id="g-tests">
+          <h3 class="g-h">Test plan</h3>
+          <p>Run these in order with three to five phones. Tick each one off as it passes; the ticks stay on this phone.</p>
+          <div class="g-progress"><div class="g-progress-bar"><i id="g-bar"></i></div><span id="g-count">0 of 7 done</span><button class="btn-link" type="button" id="g-clear">Clear ticks</button></div>
+          <ol class="tests" id="g-test-list">
+            <li class="test" data-test="t1">
+              <h4>Same room, one hop</h4>
+              <p class="need">3 phones within a few metres, nothing blocked, Range limit off</p>
+              <dl><dt>Do</dt><dd>On phone A, open Send, pick C under Nearby and send a message.</dd>
+              <dt>Pass when</dt><dd>A shows <q>Delivered in 1 hop</q> and C shows the message from A by name.</dd></dl>
+              <label class="tick"><input type="checkbox"><span>Passed</span></label>
+            </li>
+            <li class="test" data-test="t2">
+              <h4>Force a relay</h4>
+              <p class="need">The same 3 phones</p>
+              <dl><dt>Do</dt><dd>On A, tap C in Mesh and choose Block this phone. On C, block A. Send from A to C again.</dd>
+              <dt>Pass when</dt><dd>The light hops through B on the map and A shows <q>Delivered in 2 hops</q>. With 4 phones in a chain A–B–C–D, A to D takes 3 hops.</dd></dl>
+              <label class="tick"><input type="checkbox"><span>Passed</span></label>
+            </li>
+            <li class="test" data-test="t3">
+              <h4>Reach a phone you cannot hear</h4>
+              <p class="need">The chain from the previous test</p>
+              <dl><dt>Do</dt><dd>Wait about 30 seconds, then open Send on A.</dd>
+              <dt>Pass when</dt><dd>C is listed by name under Through the mesh with <q>2 hops</q>, and a message sent to it is delivered.</dd></dl>
+              <label class="tick"><input type="checkbox"><span>Passed</span></label>
+            </li>
+            <li class="test" data-test="t4">
+              <h4>Store, carry, forward</h4>
+              <p class="need">The chain, Learned route on every phone</p>
+              <dl><dt>Do</dt><dd>Carry B into another room so A and C are cut off. Send from A to C. After a minute, bring B back.</dd>
+              <dt>Pass when</dt><dd>The message waits as <q>On its way</q> while B is away, then is delivered once B returns. Try the same in Flooding to compare.</dd></dl>
+              <label class="tick"><input type="checkbox"><span>Passed</span></label>
+            </li>
+            <li class="test" data-test="t5">
+              <h4>Catch an attacker</h4>
+              <p class="need">4 phones: A and C, with two relays B and D between them</p>
+              <dl><dt>Do</dt><dd>On B, open Defend and switch on Act as the attacker. From A, send 15 to 20 messages to C, or run a Lab experiment.</dd>
+              <dt>Pass when</dt><dd>B's suspicion bar on A climbs, A announces that B was cut out of its routes, and later messages reach C through D. Afterwards, switch the attacker off and tap Forgive all phones.</dd></dl>
+              <label class="tick"><input type="checkbox"><span>Passed</span></label>
+            </li>
+            <li class="test" data-test="t6">
+              <h4>Learned route against flooding</h4>
+              <p class="need">4 to 5 phones in a chain</p>
+              <dl><dt>Do</dt><dd>Tap Reset results on every phone. Set Learned route on every phone, then in Lab run 30 messages, one every 3 s. Repeat with Flooding on every phone.</dd>
+              <dt>Pass when</dt><dd>Both rows of the results table are filled. Learned routing should send fewer frames for each delivered message.</dd></dl>
+              <label class="tick"><input type="checkbox"><span>Passed</span></label>
+            </li>
+            <li class="test" data-test="t7">
+              <h4>Collect the logs</h4>
+              <p class="need">Every phone used in the tests</p>
+              <dl><dt>Do</dt><dd>On each phone, open Lab and tap Save CSV (it goes to Downloads) or Share CSV. Copy all the files into one folder on a laptop and run the analysis script.</dd>
+              <dt>Pass when</dt><dd>The script prints a table per routing mode with delivery ratio, round trip, hops and frames per delivered message.</dd></dl>
+              <pre class="code">python tools/analyze_field_logs.py field_logs/</pre>
+              <label class="tick"><input type="checkbox"><span>Passed</span></label>
+            </li>
+          </ol>
+        </section>
+
+        <section class="g-sec" id="g-demo">
+          <h3 class="g-h">Show it in five minutes</h3>
+          <p>A running order for a lecturer or a viva, with three phones on the desk.</p>
+          <ol class="steps">
+            <li><b>Mesh.</b> Your phone is the amber lantern. The others stand where their signal puts them.</li>
+            <li><b>Send in the same room.</b> One hop, straight across.</li>
+            <li><b>Block the far phone and send again.</b> The light visibly hops through the middle phone, and the receipt says 2 hops.</li>
+            <li><b>Route.</b> Show what the phone has learned from each hop, and who it expects to meet next.</li>
+            <li><b>Defend.</b> Make one phone the attacker and let the others cut it out.</li>
+            <li><b>Lab.</b> Finish on the table comparing learned routing with flooding.</li>
+          </ol>
+        </section>
+
+        <section class="g-sec" id="g-help">
+          <h3 class="g-h">If something goes wrong</h3>
+          <details class="faq"><summary>Phones do not see each other</summary><p>Press Start on both, check Bluetooth is on and Nearby devices is allowed, keep both screens on, and give it ten seconds. On Android 11 or older, Location must be on.</p></details>
+          <details class="faq"><summary>A far phone is missing from Through the mesh</summary><p>Names travel across the mesh every 30 seconds, and only along phones that are running the app. Check that every phone in the chain shows Running.</p></details>
+          <details class="faq"><summary>The app asks for my name again</summary><p>Check the build number at the bottom of Lab. If it is old, install the latest APK over the app without uninstalling it.</p></details>
+          <details class="faq"><summary>Phones in one room take two hops</summary><p>Check that no phone is blocked and that Range limit in Route is set to Off.</p></details>
+          <details class="faq"><summary>Messages arrive, but slowly</summary><p>Each hop opens a Bluetooth connection, which takes about 0.3 to 1.5 seconds. That is real, and worth reporting.</p></details>
+        </section>
+
+        <section class="g-sec" id="g-auto">
+          <h3 class="g-h">Automated tests</h3>
+          <p>Every build is checked before it is published. 24 scenarios run the real routing engine on virtual phones over a simulated Bluetooth radio: same-room delivery, chains of up to four phones, store-carry-forward, names reaching far phones, and an attacker being caught. The finished APK is then installed on an Android emulator, which checks the name screen, a restart, every chapter, and the page for crashes.</p>
+          <p class="hint">Results for each build are on the project's Actions page on GitHub.</p>
+        </section>
+      </div>
+
     </div>
   </section>
 
@@ -125,15 +258,18 @@
     <button type="button" data-goto="route"><svg viewBox="0 0 24 24"><circle cx="5" cy="18" r="2"/><circle cx="19" cy="6" r="2"/><path d="M7 18c6 0 4-12 10-12"/></svg><span>Route</span></button>
     <button type="button" data-goto="defend"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg><span>Defend</span></button>
     <button type="button" data-goto="lab"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 10a1.5 1.5 0 0 0 1.3 2h11.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/></svg><span>Lab</span></button>
+    <button type="button" data-goto="guide"><svg viewBox="0 0 24 24"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H10a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4z"/><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H14a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z"/></svg><span>Guide</span></button>
   </nav>
 
   <div class="namecard" id="namecard" role="dialog" aria-modal="true" aria-labelledby="nc-title" hidden>
     <form class="namecard-body" id="nc-form">
-      <h2 class="h1" id="nc-title">What should your friends see?</h2>
-      <p class="hint">Your name is announced to every phone in the mesh and travels with your messages, so friends find you by name even when you are out of their range.</p>
+      <div class="nc-preview" aria-hidden="true"><span class="nc-lamp"></span><span class="tag self nc-tag"><b id="nc-preview">Your name</b><small>you</small></span></div>
+      <h2 class="display" id="nc-title">What should your friends see?</h2>
+      <p class="hint">This name is announced to every phone in the mesh and travels with your messages, so friends find you by name even when you are out of their range.</p>
+      <label class="sr" for="nc-input">Your name</label>
       <input id="nc-input" maxlength="24" autocomplete="nickname" placeholder="Your name, e.g. Hardhik" required>
       <div class="row-actions">
-        <button class="btn btn-primary" type="submit">Save name</button>
+        <button class="btn btn-primary btn-lantern" type="submit">Save name</button>
         <button class="btn btn-quiet" type="button" id="nc-cancel">Cancel</button>
       </div>
       <p class="hint build" id="nc-build"></p>
