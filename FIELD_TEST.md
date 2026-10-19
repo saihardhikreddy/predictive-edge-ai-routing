@@ -10,7 +10,7 @@ Requirements: Android 8.0 or newer, with Bluetooth LE advertising support. Almos
 
 ## 2. First run
 
-The app opens on a 3D map of the mesh: your phone is the amber lantern, and every phone it hears stands where its signal strength puts it. Real messages fly along the links as light. Drag to orbit, pinch to zoom, and tap a phone to fly to it. The tabs at the bottom (Mesh, Send, Route, Defend, Lab) each move the camera to their own shot. Drag the panel's handle up for more room.
+The app opens on a 3D map of the mesh: your phone is the amber lantern, and every phone it hears stands where its signal strength puts it. Real messages fly along the links as light. Drag to orbit, pinch to zoom, and tap a phone to fly to it. The tabs at the bottom (Mesh, Send, Route, Defend, Lab, Guide) each move the camera to their own shot. **Guide** has this whole procedure inside the app, with a checklist you can tick off as each test passes. Drag the panel's handle up for more room.
 
 1. Open **Mesh Testbed**, give the phone a name (e.g. *Hardhik*), and tap **Start**. Allow the Bluetooth permissions.
 2. Do the same on the other phones. Within a few seconds each phone shows the others in the 3D map and under **Phones nearby** in the **Mesh** chapter.
