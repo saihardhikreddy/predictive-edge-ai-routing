@@ -67,14 +67,29 @@ v=$(js 'document.getElementById("pill-sub").textContent + " | button: " + docume
 note "after pressing Start the top says: $v"
 
 # 5. every chapter
-for ch in send route defend lab mesh; do
+for ch in send route defend lab guide mesh; do
   js "document.querySelector('.nav button[data-goto=$ch]').click(); 'ok'" >/dev/null
   sleep 4
   shot "5_$ch"
   v=$(js "document.body.dataset.chapter")
   [ "$v" = "\"$ch\"" ] || err "chapter $ch did not open ($v)"
 done
-note "visited all five chapters"
+note "visited all six chapters"
+
+# 5b. the guide: tick a test, restart, the tick must still be there
+js "document.querySelector('.nav button[data-goto=guide]').click(); 'ok'" >/dev/null
+sleep 3
+js "document.querySelector('.test[data-test=t1] .tick input').click(); document.getElementById('g-count').textContent" >/dev/null
+v=$(js "document.getElementById('g-count').textContent")
+echo "$v" | grep -q "1 of 7" && note "guide: ticking a test updates the progress ($v)" || err "guide progress did not update: $v"
+shot 5_guide_ticked
+adb shell am force-stop $PKG
+sleep 2
+launch
+sleep 3
+v=$(js "document.querySelector('.test[data-test=t1]').classList.contains('done')")
+[ "$v" = "true" ] && note "guide: ticks survive a restart" || err "guide tick lost after restart ($v)"
+js "document.querySelector('.nav button[data-goto=mesh]').click(); 'ok'" >/dev/null
 
 # 6. errors and crashes
 v=$(js 'JSON.stringify(window.__errors || [])')
