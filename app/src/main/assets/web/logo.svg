@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <defs><radialGradient id="g" cx="54" cy="54" r="40" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFB547" stop-opacity=".45"/><stop offset="1" stop-color="#FFB547" stop-opacity="0"/></radialGradient></defs>
+  <rect width="108" height="108" rx="24" fill="#070A10"/>
+  <circle cx="54" cy="54" r="40" fill="url(#g)"/>
+  <path d="M54 28.5 L76.08 66.75 L31.92 66.75 Z" fill="none" stroke="#5EE6C8" stroke-opacity=".38" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M54 54 L54 28.5 M54 54 L76.08 66.75 M54 54 L31.92 66.75" fill="none" stroke="#5EE6C8" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="54" cy="54" r="13.5" fill="#070A10" stroke="#FFB547" stroke-opacity=".45" stroke-width="1.8"/>
+  <circle cx="54" cy="28.5" r="6" fill="#5EE6C8"/><circle cx="76.08" cy="66.75" r="6" fill="#5EE6C8"/><circle cx="31.92" cy="66.75" r="6" fill="#5EE6C8"/>
+  <circle cx="54" cy="54" r="8.8" fill="#FFB547"/>
+</svg>

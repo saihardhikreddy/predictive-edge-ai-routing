@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="color-scheme" content="dark">
   <title>Mesh Testbed</title>
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
   <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
   <script type="module" src="js/main.js"></script>
@@ -13,7 +14,12 @@
   <canvas id="world" aria-hidden="true"></canvas>
 
   <div class="boot" id="boot" aria-hidden="true">
-    <svg class="boot-mark" viewBox="0 0 64 64" width="56" height="56"><circle cx="32" cy="32" r="4"/><circle cx="32" cy="32" r="14"/><circle cx="32" cy="32" r="26"/></svg>
+    <svg class="boot-mark" viewBox="18 18 72 72" width="88" height="88" aria-hidden="true">
+      <path class="bm-tri" d="M54 28.5 L76.08 66.75 L31.92 66.75 Z"/><path class="bm-spoke" d="M54 54 L54 28.5 M54 54 L76.08 66.75 M54 54 L31.92 66.75"/>
+      <circle class="bm-ping" cx="54" cy="54" r="13.5"/><circle class="bm-ping bm-ping2" cx="54" cy="54" r="13.5"/>
+      <circle cx="54" cy="28.5" r="6" class="bm-node"/><circle cx="76.08" cy="66.75" r="6" class="bm-node"/><circle cx="31.92" cy="66.75" r="6" class="bm-node"/><circle class="bm-core" cx="54" cy="54" r="8.8"/>
+    </svg>
+    <b class="boot-name">Mesh Testbed</b>
     <p>Lighting up the mesh</p>
   </div>
 

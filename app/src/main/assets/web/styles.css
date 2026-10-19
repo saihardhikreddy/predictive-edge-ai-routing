@@ -52,11 +52,15 @@ body.no-webgl { background: radial-gradient(ellipse 80% 50% at 50% 30%, rgba(255
   background: var(--night); transition: opacity 0.9s var(--ease), visibility 0.9s;
 }
 .boot p { margin: 0; color: var(--muted); font-size: 13px; }
-.boot-mark { fill: none; stroke: var(--lantern); stroke-width: 1.5; }
-.boot-mark circle:nth-child(1) { fill: var(--lantern); stroke: none; }
-.boot-mark circle:nth-child(2) { animation: ping 1.6s var(--ease) infinite; transform-origin: 32px 32px; }
-.boot-mark circle:nth-child(3) { animation: ping 1.6s var(--ease) 0.4s infinite; transform-origin: 32px 32px; opacity: 0.5; }
-@keyframes ping { from { transform: scale(0.4); opacity: 1; } to { transform: scale(1); opacity: 0; } }
+.boot-name { margin-top: 18px; font: 700 30px/1 var(--display); font-stretch: 80%; letter-spacing: -0.01em; color: var(--text); }
+.boot-mark { overflow: visible; }
+.boot-mark .bm-tri { fill: none; stroke: var(--route); stroke-opacity: 0.38; stroke-width: 2.2; stroke-linejoin: round; }
+.boot-mark .bm-spoke { fill: none; stroke: var(--route); stroke-width: 3; stroke-linecap: round; }
+.boot-mark .bm-node { fill: var(--route); }
+.boot-mark .bm-core { fill: var(--lantern); filter: drop-shadow(0 0 6px var(--lantern)); }
+.boot-mark .bm-ping { fill: none; stroke: var(--lantern); stroke-width: 1.8; transform-origin: 54px 54px; animation: ping 1.8s var(--ease) infinite; }
+.boot-mark .bm-ping2 { animation-delay: 0.6s; }
+@keyframes ping { from { transform: scale(0.7); opacity: 0.9; } to { transform: scale(2.6); opacity: 0; } }
 body.ready .boot { opacity: 0; visibility: hidden; }
 
 /* ─── name tags over phones ─── */
