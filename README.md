@@ -34,7 +34,7 @@ See **[IDEA.md](IDEA.md)** for the revised idea, measured results and limitation
 ```bash
 pip install -r requirements.txt
 
-python -m unittest discover tests     # 18 tests
+python -m unittest discover tests     # 23 tests
 python benchmark.py --quick           # ~20 s smoke run
 python benchmark.py                   # full run (~3 min) -> results/
 python digital_twin_server.py         # open http://localhost:8080
@@ -48,8 +48,8 @@ Every push to `main` builds **Mesh Testbed** on GitHub Actions and publishes it 
 
 ## Android module
 
-`app/` is the testbed app: a 3D three.js interface (`assets/web/`, six chapters: Mesh, Send, Route, Defend, Lab, and a Field guide with setup, the test plan and a demo script) in a WebView, driven by the Kotlin engine through a small JSON bridge (`MainActivity.kt`, `mesh/StateJson.kt`). Open `assets/web/index.html` in a desktop browser to try the UI with a built-in demo engine. Engine: `mesh/BleTransport.kt` (advertise, scan, GATT inbox), `mesh/MeshEngine.kt` (flooding and MARL forwarding, encounters, FedAvg, 2-hop ACK trust, delivery ACKs), `mesh/EventLog.kt` (CSV). To build locally, open the root in Android Studio. `MarlRouter` is pure Kotlin, so it can be unit-tested on the JVM (`app/src/test`). The integration point in BitChat is the relay step of `BluetoothMeshService`: call `decide()` there instead of rebroadcasting. `bitchat_repo/` is currently empty; clone upstream BitChat Android there when you start that integration.
+`app/` is the testbed app: a 3D three.js interface (`assets/web/`, six chapters: Mesh, Send, Route, Defend, Lab, and a Field guide with setup, the test plan and a demo script) in a WebView, driven by the Kotlin engine through a small JSON bridge (`MainActivity.kt`, `mesh/StateJson.kt`). Open `assets/web/index.html` in a desktop browser to try the UI with a built-in demo engine. Engine: `mesh/BleTransport.kt` (advertise, scan, GATT inbox), `mesh/MeshEngine.kt` (flooding and MARL forwarding, encounters, FedAvg, 2-hop ACK trust, delivery ACKs), `mesh/EventLog.kt` (CSV). To build locally, open the root in Android Studio. `MarlRouter` is pure Kotlin, so it can be unit-tested on the JVM (`app/src/test`). The integration point in BitChat is the relay step of `BluetoothMeshService`: call `decide()` there instead of rebroadcasting. To start that integration, clone upstream BitChat Android into `bitchat_repo/` (not tracked here).
 
 ## Presentation files
 
-`Predictive_Edge_AI_Routing*.pptx`, `presentation.tex` and `presentation_guide.md` are from the first review. Several of their numbers (41.8 ms, 140 → 18 B, −85% power) came from the old hard-coded demo. Replace them with `results/summary.md` before the next review; IDEA.md §2 lists each one.
+`presentation_guide.md` (and the first-review slides, which are kept outside this repo) date from the first review. Several of their numbers (41.8 ms, 140 → 18 B, −85% power) came from the old hard-coded demo. Replace them with `results/summary.md` before the next review; IDEA.md §2 lists each one.
