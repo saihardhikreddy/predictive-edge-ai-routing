@@ -11,3 +11,8 @@ build/
 local.properties
 .kotlin/
 *.apk
+
+# Python envs and local logs
+.venv/
+venv/
+*.log
