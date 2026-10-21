@@ -32,7 +32,7 @@ See **[IDEA.md](IDEA.md)** for the revised idea, measured results and limitation
 ## Run it
 
 ```bash
-pip install websockets matplotlib
+pip install -r requirements.txt
 
 python -m unittest discover tests     # 18 tests
 python benchmark.py --quick           # ~20 s smoke run
