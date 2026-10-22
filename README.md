@@ -34,9 +34,10 @@ See **[IDEA.md](IDEA.md)** for the revised idea, measured results and limitation
 ```bash
 pip install -r requirements.txt
 
-python -m unittest discover tests     # 23 tests
+python -m unittest discover tests     # 37 tests
 python benchmark.py --quick           # ~20 s smoke run
 python benchmark.py                   # full run (~3 min) -> results/
+python benchmark.py --workers 2       # limit CPU use on a laptop
 python digital_twin_server.py         # open http://localhost:8080
 ```
 

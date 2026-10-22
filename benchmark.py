@@ -139,6 +139,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--out", default="results")
+    ap.add_argument("--workers", type=int, default=None,
+                    help="parallel processes (default: one per CPU core)")
     args = ap.parse_args()
 
     seeds = list(range(2 if args.quick else 6))
@@ -165,7 +167,7 @@ def main():
                              traffic_interval=1.5, window=60, cold_start=v in COLD_VARIANTS))
 
     print(f"Running {len(jobs)} simulations ...")
-    with ProcessPoolExecutor() as ex:
+    with ProcessPoolExecutor(max_workers=args.workers) as ex:
         rows = list(ex.map(one_run, jobs))
 
     keys = sorted({k for r in rows for k in r}, key=lambda k: list(rows[0]).index(k) if k in rows[0] else 99)
