@@ -50,10 +50,17 @@ class Forecast {
 
     private class Outage {
         var downSince: Long? = null
-        var meanMs = 0.0
-        var n = 0
+        /** The path came back at this time; the outage only ends once it has stayed back for a while. */
+        var upSince: Long? = null
+        val recent = ArrayDeque<Double>()
+        val meanMs get() = if (recent.isEmpty()) 0.0 else recent.average()
+        val n get() = recent.size
         var lastHops = 2
     }
+
+    /** A path must stay up this long to end an outage, and shorter outages are flicker, not absences. */
+    private val settleMs = 3_000L
+    private val minOutageMs = 5_000L
     private val outages = HashMap<String, Outage>()
 
     data class Prediction(
@@ -83,12 +90,18 @@ class Forecast {
         if (reachable) {
             o.lastHops = max(1, hops)
             val down = o.downSince ?: return
-            val d = (t - down).toDouble()
-            o.meanMs = if (o.n == 0) d else 0.7 * o.meanMs + 0.3 * d
-            o.n++
+            val up = o.upSince ?: t.also { o.upSince = it }
+            if (t - up < settleMs) return
+            val d = (up - down).toDouble()
+            if (d >= minOutageMs) {
+                o.recent.addLast(d)
+                while (o.recent.size > 8) o.recent.removeFirst()
+            }
             o.downSince = null
-        } else if (o.downSince == null) {
-            o.downSince = t
+            o.upSince = null
+        } else {
+            o.upSince = null // a brief return does not end the outage
+            if (o.downSince == null) o.downSince = t
         }
     }
 

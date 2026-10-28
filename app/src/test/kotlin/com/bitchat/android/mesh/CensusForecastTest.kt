@@ -45,7 +45,13 @@ class CensusForecastTest {
         assertTrue(f.predict("x", 0.95, null, 0).etaMs in 1_000..1_400)
         // outages: away 60 s, back, away 60 s ... -> carry forecast of about a minute
         var t = 0L
-        repeat(5) { f.observe("y", true, 2, t); t += 1_000; f.observe("y", false, 0, t); t += 60_000 }
+        repeat(5) {
+            f.observe("y", true, 2, t); t += 3_000; f.observe("y", true, 2, t); t += 1_000
+            f.observe("y", false, 0, t); t += 30_000
+            f.observe("y", true, 2, t); t += 1_000; f.observe("y", false, 0, t) // a 1 s flicker: same outage
+            t += 29_000
+        }
+        f.observe("y", true, 2, t); t += 3_000; f.observe("y", true, 2, t); t += 1_000; f.observe("y", false, 0, t)
         val c = f.predict("y", null, null, t)
         assertEquals(Forecast.CARRY, c.kind)
         assertTrue("mean outage ≈ 60 s, got ${c.meanOutageMs}", c.meanOutageMs in 55_000..65_000)
