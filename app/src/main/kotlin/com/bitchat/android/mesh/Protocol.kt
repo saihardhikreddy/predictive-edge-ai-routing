@@ -19,7 +19,8 @@ object Protocol {
         return (idBytes + listOf(battery.coerceIn(0, 100).toByte(), buffer.coerceIn(0, 100).toByte())).toByteArray()
     }
 
-    data class Advert(val nodeId: String, val battery: Int, val buffer: Int)
+    /** [longRange]: heard over Bluetooth 5 Long Range (LE Coded PHY) rather than the normal 1M PHY. */
+    data class Advert(val nodeId: String, val battery: Int, val buffer: Int, val longRange: Boolean = false)
 
     fun parseAdvert(b: ByteArray): Advert? {
         if (b.size < 6) return null

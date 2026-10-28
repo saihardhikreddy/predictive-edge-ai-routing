@@ -15,6 +15,15 @@ interface Radio {
     fun stop()
     fun startAdvertising(advert: ByteArray)
     fun send(peer: Any, bytes: ByteArray, cb: (Boolean) -> Unit)
+
+    /** True when this phone can use Bluetooth 5 Long Range (LE Coded PHY). */
+    val longRangeSupported: Boolean get() = false
+
+    /** Turn Long Range advertising and scanning on or off (no-op without support). */
+    fun setLongRange(on: Boolean) {}
+
+    /** Send over Long Range when [longRange] is true and supported; otherwise the normal 1M PHY. */
+    fun send(peer: Any, bytes: ByteArray, longRange: Boolean, cb: (Boolean) -> Unit) = send(peer, bytes, cb)
 }
 
 /** Builds a radio bound to the engine's thread and callbacks. */
