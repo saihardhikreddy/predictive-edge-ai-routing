@@ -81,7 +81,7 @@ js "document.querySelector('.nav button[data-goto=guide]').click(); 'ok'" >/dev/
 sleep 3
 js "document.querySelector('.test[data-test=t1] .tick input').click(); document.getElementById('g-count').textContent" >/dev/null
 v=$(js "document.getElementById('g-count').textContent")
-echo "$v" | grep -q "1 of 9" && note "guide: ticking a test updates the progress ($v)" || err "guide progress did not update: $v"
+echo "$v" | grep -q "1 of 10" && note "guide: ticking a test updates the progress ($v)" || err "guide progress did not update: $v"
 shot 5_guide_ticked
 adb shell am force-stop $PKG
 sleep 2

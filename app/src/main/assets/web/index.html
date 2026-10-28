@@ -87,6 +87,7 @@
           <button type="button" role="radio" data-mode="F">Flooding</button>
         </div>
         <p class="hint" id="mode-hint"></p>
+        <label class="row-switch"><span><b>Bluetooth 5 Long Range</b><small id="lr-sub">Reaches about twice as far for distant phones, at a slower speed</small></span><input type="checkbox" id="longrange"></label>
         <label class="row-switch"><span><b>Emergency triage</b><small>Detects SOS texts, shrinks them, sends two copies first</small></span><input type="checkbox" id="triage"></label>
         <div class="range">
           <div class="range-head"><b>Range limit</b><output id="range-out"></output></div>
@@ -183,7 +184,7 @@
         <section class="g-sec" id="g-tests">
           <h3 class="g-h">Test plan</h3>
           <p>Run these in order with three to five phones. Tick each one off as it passes; the ticks stay on this phone.</p>
-          <div class="g-progress"><div class="g-progress-bar"><i id="g-bar"></i></div><span id="g-count">0 of 9 done</span><button class="btn-link" type="button" id="g-clear">Clear ticks</button></div>
+          <div class="g-progress"><div class="g-progress-bar"><i id="g-bar"></i></div><span id="g-count">0 of 10 done</span><button class="btn-link" type="button" id="g-clear">Clear ticks</button></div>
           <ol class="tests" id="g-test-list">
             <li class="test" data-test="t1">
               <h4>Same room, one hop</h4>
@@ -241,6 +242,13 @@
               <dt>Pass when</dt><dd>Each receipt shows the forecast next to the real time, and Lab reports how many forecasts held. Walk the relay away and back a few times first, so the phone learns how long it usually stays away.</dd></dl>
               <label class="tick"><input type="checkbox"><span>Passed</span></label>
             </li>
+            <li class="test" data-test="t10">
+              <h4>Reach further with Long Range</h4>
+              <p class="need">2 phones that show Long Range as supported in Route</p>
+              <dl><dt>Do</dt><dd>Walk the phones apart, in a corridor or outdoors, until one disappears from Mesh with Long Range off. Switch Long Range on in Route on both phones and wait 15 seconds.</dd>
+              <dt>Pass when</dt><dd>The phone comes back with a <q>Long Range</q> badge and a message to it is delivered in 1 hop. Note both distances for the report.</dd></dl>
+              <label class="tick"><input type="checkbox"><span>Passed</span></label>
+            </li>
             <li class="test" data-test="t7">
               <h4>Collect the logs</h4>
               <p class="need">Every phone used in the tests</p>
@@ -278,7 +286,7 @@
 
         <section class="g-sec" id="g-auto">
           <h3 class="g-h">Automated tests</h3>
-          <p>Every build is checked before it is published. 28 scenarios run the real routing engine on virtual phones over a simulated Bluetooth radio: same-room delivery, chains of up to four phones, store-carry-forward, names reaching far phones, the census counting a whole chain and its SOS calls, forecasts checked against real delivery times, and an attacker being caught. The finished APK is then installed on an Android emulator, which checks the name screen, a restart, every chapter, and the page for crashes.</p>
+          <p>Every build is checked before it is published. 34 scenarios run the real routing engine on virtual phones over a simulated Bluetooth radio: same-room delivery, chains of up to four phones, store-carry-forward, names reaching far phones, the census counting a whole chain and its SOS calls, forecasts checked against real delivery times, Bluetooth 5 Long Range joining phones that normal Bluetooth cannot reach, and an attacker being caught. The finished APK is then installed on an Android emulator, which checks the name screen, a restart, every chapter, and the page for crashes.</p>
           <p class="hint">Results for each build are on the project's Actions page on GitHub.</p>
         </section>
       </div>

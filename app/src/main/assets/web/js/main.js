@@ -160,6 +160,7 @@ $("nc-form").addEventListener("submit", (e) => {
 });
 document.querySelectorAll(".segmented button").forEach((b) => b.addEventListener("click", () => call("setMode", b.dataset.mode)));
 $("triage").addEventListener("change", (e) => call("setTriage", e.target.checked));
+$("longrange").addEventListener("change", (e) => call("setLongRange", e.target.checked));
 $("sinkhole").addEventListener("change", (e) => call("setSinkhole", e.target.checked));
 $("range").addEventListener("input", (e) => { $("range-out").textContent = rangeLabel(+e.target.value); });
 $("range").addEventListener("change", (e) => call("setRange", +e.target.value));
@@ -344,7 +345,7 @@ function render(force) {
   const ns = S.neighbors || [];
   keyed("neighbors", ns.map((n) => {
     const cls = n.quarantined ? "bad" : n.present && !n.blocked ? "" : "away";
-    const sub = n.quarantined ? "Cut off: kept dropping messages" : n.blocked ? "Blocked by you" : n.present ? `Link ${pct(n.linkQ)}, battery ${n.battery}%` : `Last heard ${n.seenAgoS} s ago`;
+    const sub = n.quarantined ? "Cut off: kept dropping messages" : n.blocked ? "Blocked by you" : n.present ? `${n.longRange ? "Long Range, " : ""}Link ${pct(n.linkQ)}, battery ${n.battery}%` : `Last heard ${n.seenAgoS} s ago`;
     return {
       key: n.id,
       innerAttrs: { "data-id": n.id, "aria-pressed": String(n.id === selected) },
@@ -401,6 +402,11 @@ function render(force) {
     ? "Every phone repeats every message to everyone it hears. Reliable in small groups, but it costs every phone battery and the copies collide."
     : "Each phone hands a message to the one neighbour most likely to meet the destination, or holds it until a better one comes along. It learns from every hop.";
   $("triage").checked = !!S.triageOn;
+  $("longrange").checked = !!S.longRangeOn && !!S.longRangeSupported;
+  $("longrange").disabled = !S.longRangeSupported;
+  $("lr-sub").textContent = S.longRangeSupported
+    ? "Reaches about twice as far for distant phones, at a slower speed. This phone supports it."
+    : "This phone's Bluetooth does not support Long Range, so it uses normal range.";
   if (document.activeElement !== $("range")) { $("range").value = S.rangeDbm; $("range-out").textContent = rangeLabel(S.rangeDbm); }
   const names = ["Base", "Meets dest", "Link", "Battery", "Busy", "Is dest", "Hold"];
   const w = S.weights || [];

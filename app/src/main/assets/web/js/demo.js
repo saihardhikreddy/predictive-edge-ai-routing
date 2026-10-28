@@ -11,7 +11,7 @@ export function createDemoEngine(emit) {
   let t0 = Date.now();
   const s = {
     myId: "F0E1D2C3", nick: "Phone-F0E1", nickSet: false, running: false, status: "Stopped", mode: "M", sinkhole: false, triageOn: true,
-    rangeDbm: -100, battery: 82, neighbors: [], known: [], messages: [],
+    rangeDbm: -100, longRangeOn: true, longRangeSupported: true, battery: 82, neighbors: [], known: [], messages: [],
     stats: { M: { originated: 0, confirmed: 0, rttSum: 0, hopSum: 0, sosOriginated: 0, sosConfirmed: 0 }, F: { originated: 0, confirmed: 0, rttSum: 0, hopSum: 0, sosOriginated: 0, sosConfirmed: 0 } },
     txFrames: 0, txFails: 0, txBytes: 0, stored: 0, queue: 0,
     weights: [0, 7, 0.5, 1, -1.5, 10, -0.3], samples: 0, flRounds: 0, predictability: [],
@@ -42,6 +42,7 @@ export function createDemoEngine(emit) {
           linkQ: 1 / (1 + Math.exp(-(rssi + 85) / 2.5)),
           reputation: n?.reputation ?? 0.5, anomaly: n?.anomaly ?? 0, quarantined: n?.quarantined ?? false,
           blocked: (s.blocked || []).includes(p.id),
+          longRange: p.id === "D9A0B4C7",
         };
       });
       // [id, name, hops, heardAgoS, present]: the first four are in range, Canteen is 3 hops away
@@ -112,6 +113,7 @@ export function createDemoEngine(emit) {
         case "setSinkhole": s.sinkhole = !!args[0]; break;
         case "setTriage": s.triageOn = !!args[0]; break;
         case "setRange": s.rangeDbm = +args[0]; break;
+        case "setLongRange": s.longRangeOn = !!args[0]; break;
         case "setNick": s.nick = String(args[0] || "").trim().slice(0, 24) || s.nick; s.nickSet = true; break;
         case "toggleBlock": { s.blocked = s.blocked || []; const i = s.blocked.indexOf(args[0]); if (i >= 0) s.blocked.splice(i, 1); else s.blocked.push(args[0]); break; }
         case "send": send(args[0], args[1]); break;
