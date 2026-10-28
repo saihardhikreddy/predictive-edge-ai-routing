@@ -40,6 +40,26 @@ Phones that meet **average their model weights** (gossip federated learning), so
 - **Sinkhole at t = 30 s:** delivery after the attack is Flooding 0.77, MARL without IDS 0.64, **MARL with IDS 0.85**. The IDS cuts swallowed packets from 76 to 17.
 - **SOS:** delivery ratio 0.92–0.97 across densities, with two copies, priority, and no exploration.
 
+## 3b. Two new features (October 2026)
+
+**Survivor census.** Every phone estimates how many phones are in the *whole* mesh, how many SOS calls were
+raised, and how many reached someone, with no server and no list of ids. Each count is a 256-bit
+linear-counting sketch (32 bytes) merged with a bitwise OR whenever phones talk, so duplicates and repeat
+meetings never inflate it, and its size does not grow with the mesh. Counts live in 10-minute windows so
+phones that leave drop out. Measured: unbiased, ±6 % up to 100 phones; a chain of 30 phones converges to
+exactly 30 (`results/census_accuracy.md`). On the phones, the end of a chain hears one phone but reports
+all of them. Rescuers would get a head count and an unanswered-SOS count from any single phone.
+
+**Delivery forecast.** Before sending, the phone predicts when delivery will be confirmed and how likely
+that is: from measured hop times when a path exists (direct or h hops), and, when no path exists, from a
+learned per-friend *outage time* (how long they usually stay out of reach), treated as a memoryless wait:
+P(path within H) = 1 − e^(−H / mean outage). Every confirmed delivery feeds the error back into a
+per-situation correction factor, so the forecast calibrates itself. Each receipt shows forecast vs actual
+and the Lab chapter reports how many forecasts held; the virtual-phone scenarios report the same numbers
+in CI. Limitation: the memoryless assumption is wrong for strictly periodic movement.
+
+Neither feature exists in BitChat, Briar or Bridgefy as far as we know.
+
 ## 4. What the results honestly say (put this on a slide; examiners respect it)
 
 1. **The energy and collision win is real and grows with density.** Flooding's cost grows with neighbourhood size; unicast routing's doesn't.
