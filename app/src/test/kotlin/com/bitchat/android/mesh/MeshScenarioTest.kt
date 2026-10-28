@@ -37,9 +37,9 @@ class MeshScenarioTest {
 
     // ------------------------------------------------------------ helpers
 
-    private fun phone(name: String, x: Double, y: Double = 0.0, mode: String = Protocol.MODE_MARL): MeshEngine {
+    private fun phone(name: String, x: Double, y: Double = 0.0, mode: String = Protocol.MODE_MARL, longRange: Boolean = false): MeshEngine {
         val e = MeshEngine(ctx, Looper.getMainLooper(), { SystemClock.uptimeMillis() }, { 80 }, air.factory(name), "mesh_$name")
-        air.radio(name).apply { this.x = x; this.y = y }
+        air.radio(name).apply { this.x = x; this.y = y; coded = longRange }
         e.setNick(name)
         e.setMode(mode)
         e.start()
@@ -324,6 +324,75 @@ class MeshScenarioTest {
         // the forecast treats the wait as memoryless, so on a strict walking timetable it can be off;
         // it must still be the right order of magnitude
         assertTrue("carry forecast within a factor of 3", m.rttMs in m.fcMs / 3..m.fcMs * 3)
+    }
+
+    // ------------------------------------------------------- Bluetooth 5 Long Range
+
+    @Test
+    fun longRange_reachesAPhoneBeyondNormalRange_inOneHop() {
+        // 16 m apart: beyond normal BLE range here (12 m), inside Long Range
+        phone("A", 0.0, longRange = true); phone("C", 16.0, longRange = true)
+        run(20.0)
+        val n = st("A").neighbors.firstOrNull { it.id == id("C") }
+        assertTrue("A should hear C over Long Range: ${st("A").neighbors}", n != null && n.present && n.longRange)
+        val m = sendAndWait("A", "C", wait = 20.0)
+        println("long range scenario: 16 m apart, ${describe(m)}, link ${(n!!.linkQ * 100).toInt()} %")
+        assertEquals(describe(m), "delivered", m.status)
+        assertEquals(1, m.hops)
+    }
+
+    @Test
+    fun withoutLongRange_theSamePhonesCannotTalk() {
+        phone("A", 0.0); phone("C", 16.0)
+        run(20.0)
+        phones.getValue("A").send(id("C"), "hello?")
+        run(30.0)
+        println("long range scenario (off): 16 m apart, A hears ${st("A").neighbors.count { it.present }} phones, message ${lastSent("A", "C").status}")
+        assertTrue(st("A").neighbors.none { it.present })
+        assertEquals("sent", lastSent("A", "C").status)
+    }
+
+    @Test
+    fun longRange_joinsAMeshThatIsSplitWithoutIt() {
+        // 16 m spacing: three islands with normal BLE, one mesh with Long Range
+        phone("A", 0.0, longRange = true); phone("B", 16.0, longRange = true); phone("C", 32.0, longRange = true)
+        run(60.0)
+        val m = sendAndWait("A", "C", wait = 40.0)
+        println("long range scenario: split mesh joined, ${describe(m)}")
+        assertEquals(describe(m), "delivered", m.status)
+        assertEquals(2, m.hops)
+    }
+
+    @Test
+    fun longRange_cutsHopsInAChain() {
+        // 8 m spacing, 32 m end to end: 4 hops with normal BLE (see the next test)
+        for ((i, n) in listOf("A", "B", "C", "D", "E").withIndex()) phone(n, i * 8.0, longRange = true)
+        run(70.0)
+        val m = sendAndWait("A", "E", wait = 40.0)
+        println("long range scenario: 5-phone chain, 32 m, ${describe(m)} (normal BLE needs 4 hops)")
+        assertEquals(describe(m), "delivered", m.status)
+        assertTrue("Long Range should skip phones: ${describe(m)}", m.hops <= 3)
+    }
+
+    @Test
+    fun withoutLongRange_theChainNeedsFourHops() {
+        for ((i, n) in listOf("A", "B", "C", "D", "E").withIndex()) phone(n, i * 8.0)
+        run(70.0)
+        val m = sendAndWait("A", "E", wait = 40.0)
+        println("long range scenario (off): 5-phone chain, 32 m, ${describe(m)}")
+        assertEquals(describe(m), "delivered", m.status)
+        assertEquals(4, m.hops)
+    }
+
+    @Test
+    fun longRange_oldPhonesStillWorkOnNormalBluetooth() {
+        // A supports Long Range, B is an older phone that does not
+        phone("A", 0.0, longRange = true); phone("B", 6.0)
+        run(15.0)
+        val m = sendAndWait("A", "B")
+        assertEquals(describe(m), "delivered", m.status)
+        assertEquals(1, m.hops)
+        assertFalse(st("A").neighbors.first { it.id == id("B") }.longRange)
     }
 
     // ------------------------------------------------------- attack

@@ -16,7 +16,7 @@ import kotlin.math.max
  * the gaps real phones show), and a frame sent to a phone in range arrives after a GATT-like
  * 300 ms delay. Everything runs on the main looper, so Robolectric's virtual clock drives it.
  */
-class VirtualAir(var rangeM: Double = 12.0) {
+class VirtualAir(var rangeM: Double = 12.0, var codedRangeM: Double = 24.0) {
     val handler = Handler(Looper.getMainLooper())
     private val radios = mutableListOf<VirtualRadio>()
 
@@ -33,6 +33,13 @@ class VirtualAir(var rangeM: Double = 12.0) {
         /** Adverts are silent until this virtual time (ms), like a phone pausing its advertiser. */
         var advertGapUntil = 0L
         var framesSent = 0
+        /** Supports Bluetooth 5 Long Range (LE Coded PHY): about 2x the range, slower frames. */
+        var coded = false
+        var longRangeOn = true
+        var codedFramesSent = 0
+        val longRange get() = coded && longRangeOn
+        override val longRangeSupported get() = coded
+        override fun setLongRange(on: Boolean) { longRangeOn = on }
 
         override val isEnabled = true
         override var queueSize = 0
@@ -40,20 +47,24 @@ class VirtualAir(var rangeM: Double = 12.0) {
         override fun stop() { running = false }
         override fun startAdvertising(advert: ByteArray) { this.advert = advert }
 
-        override fun send(peer: Any, bytes: ByteArray, cb: (Boolean) -> Unit) {
+        override fun send(peer: Any, bytes: ByteArray, cb: (Boolean) -> Unit) = send(peer, bytes, false, cb)
+
+        override fun send(peer: Any, bytes: ByteArray, longRange: Boolean, cb: (Boolean) -> Unit) {
             val to = peer as VirtualRadio
+            val lr = longRange && this.longRange && to.longRange
             framesSent++
+            if (lr) codedFramesSent++
             queueSize++
             handler.postDelayed({
                 queueSize--
-                val ok = running && to.running && inRange(this, to)
+                val ok = running && to.running && (if (lr) inCodedRange(this, to) else inRange(this, to))
                 if (ok) to.engineHandler.post { to.onFrame(bytes.copyOf()) }
                 engineHandler.post { cb(ok) }
-            }, 300)
+            }, if (lr) 900L else 300L) // 125 kbit/s Coded PHY: slower frames
         }
 
-        fun deliverAdvertFrom(from: VirtualRadio) {
-            val adv = Protocol.parseAdvert(from.advert) ?: return
+        fun deliverAdvertFrom(from: VirtualRadio, longRange: Boolean = false) {
+            val adv = Protocol.parseAdvert(from.advert)?.copy(longRange = longRange) ?: return
             engineHandler.post { onAdvert(adv, from, rssi(from, this)) }
         }
     }
@@ -66,6 +77,7 @@ class VirtualAir(var rangeM: Double = 12.0) {
 
     fun distance(a: VirtualRadio, b: VirtualRadio) = hypot(a.x - b.x, a.y - b.y)
     fun inRange(a: VirtualRadio, b: VirtualRadio) = distance(a, b) <= rangeM
+    fun inCodedRange(a: VirtualRadio, b: VirtualRadio) = a.longRange && b.longRange && distance(a, b) <= codedRangeM
     fun rssi(a: VirtualRadio, b: VirtualRadio): Int = (-40 - 46 * log10(max(distance(a, b), 1.0))).toInt()
 
     private val beacon = object : Runnable {
@@ -73,7 +85,11 @@ class VirtualAir(var rangeM: Double = 12.0) {
             val now = SystemClock.uptimeMillis()
             for (s in radios) {
                 if (!s.running || now < s.advertGapUntil) continue
-                for (r in radios) if (r !== s && r.running && inRange(s, r)) r.deliverAdvertFrom(s)
+                for (r in radios) {
+                    if (r === s || !r.running) continue
+                    if (inRange(s, r)) r.deliverAdvertFrom(s)
+                    if (inCodedRange(s, r)) r.deliverAdvertFrom(s, longRange = true) // the extended Coded PHY advert
+                }
             }
             handler.postDelayed(this, 1000)
         }
