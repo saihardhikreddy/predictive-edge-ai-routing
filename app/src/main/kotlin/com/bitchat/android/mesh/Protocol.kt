@@ -87,6 +87,11 @@ sealed class Frame {
         }
     }
 
+    /** Survivor census sketches (see Census.kt), gossiped to neighbours whenever they change. */
+    data class CensusMsg(val src: String, val sketches: JSONArray) : Frame() {
+        override fun toJson() = JSONObject().apply { put("t", "C"); put("s", src); put("k", sketches) }
+    }
+
     /** Per-hop ACK carrying the receiver's value estimate V(d) (null when the receiver is the destination). */
     data class HopAck(val msgId: String, val copy: Int, val src: String, val value: Double?) : Frame() {
         override fun toJson() = JSONObject().apply {
@@ -125,6 +130,7 @@ sealed class Frame {
                     j.optString("sn"),
                 )
                 "N" -> Announce(j.getString("s"), j.optString("n"), j.getInt("q"), j.optInt("h"), j.optInt("tl"), j.optString("f"))
+                "C" -> CensusMsg(j.getString("s"), j.optJSONArray("k") ?: JSONArray())
                 "A" -> HopAck(j.getString("m"), j.getInt("c"), j.getString("s"), if (j.has("v")) j.getDouble("v") else null)
                 "F" -> FwdAck(j.getString("m"), j.getInt("c"), j.getString("s"))
                 "K" -> DeliveryAck(j.getString("m"), j.getString("s"), j.getString("d"), j.getLong("o"),

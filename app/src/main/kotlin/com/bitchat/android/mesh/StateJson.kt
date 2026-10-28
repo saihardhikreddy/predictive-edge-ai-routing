@@ -26,9 +26,20 @@ fun UiState.toJson(): String {
         }
     })
     o.put("nickSet", nickSet)
-    // [id, name, hops (1 = in direct range, 0 = unknown), heardAgoS (-1 = never), present]
+    // [id, name, hops (1 = in direct range, 0 = unknown), heardAgoS (-1 = never), present,
+    //  forecast kind (0 direct, 1 routed, 2 carry, 3 none), forecast ms, forecast probability, mean outage ms]
     o.put("known", JSONArray().apply {
-        known.forEach { k -> put(JSONArray().put(k.id).put(k.name).put(k.hops).put(k.heardAgoS).put(k.present)) }
+        known.forEach { k ->
+            put(JSONArray().put(k.id).put(k.name).put(k.hops).put(k.heardAgoS).put(k.present)
+                .put(k.fcKind).put(k.fcMs).put(k.fcP).put(k.fcOutageMs))
+        }
+    })
+    o.put("census", JSONObject().apply {
+        put("phones", census.phones); put("sos", census.sos); put("answered", census.answered)
+        put("unanswered", census.unanswered); put("saturated", census.saturated); put("direct", census.direct)
+    })
+    o.put("forecastAccuracy", JSONObject().apply {
+        put("n", forecastAccuracy.n); put("good", forecastAccuracy.good); put("medianErrPct", forecastAccuracy.medianErrPct)
     })
     o.put("messages", JSONArray().apply {
         messages.forEach { m ->
@@ -36,6 +47,7 @@ fun UiState.toJson(): String {
                 put("id", m.id); put("peer", m.peer); put("peerName", m.peerName); put("text", m.text)
                 put("outgoing", m.outgoing); put("intent", m.intent); put("status", m.status); put("time", m.time)
                 put("rttMs", m.rttMs); put("hops", m.hops); put("mode", m.mode); put("note", m.note)
+                put("fcKind", m.fcKind); put("fcMs", m.fcMs); put("fcP", m.fcP)
             })
         }
     })

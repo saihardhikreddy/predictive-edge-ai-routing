@@ -128,6 +128,13 @@ class MeshEngine(
     private var lastAdvert = 0L
     private var lastAdvertBytes: ByteArray? = null
 
+    /** Survivor census (whole-mesh head count and SOS tally) and the delivery forecast. */
+    private val census = Census()
+    private val censusSent = HashMap<String, Pair<Int, Long>>()
+    private var lastCensusLog = ""
+    private val sosReceived = HashSet<String>()
+    private val forecast = Forecast()
+
     private val stats = HashMap<String, ModeStats>().apply {
         put(Protocol.MODE_MARL, ModeStats())
         put(Protocol.MODE_FLOOD, ModeStats())
@@ -252,6 +259,8 @@ class MeshEngine(
             processCtrl(t)
             processWatches(t)
             processExperiment(t)
+            processCensus(t)
+            observeReach(t)
             if (t - lastAdvert > 10_000) refreshAdvert(t)
             if (t - lastAnnounce > 30_000) announce(t)
             publish()
@@ -408,10 +417,11 @@ class MeshEngine(
             is Frame.HopAck -> frame.msgId
             is Frame.FwdAck -> frame.msgId
             is Frame.DeliveryAck -> frame.msgId
-            is Frame.Announce -> ""
             else -> ""
         }
+        val sentAt = now()
         transport.send(dev, bytes) { ok ->
+            if (frame is Frame.Data) forecast.onHop(now() - sentAt, ok)
             txFrames++
             txBytes += bytes.size
             if (!ok) txFails++
@@ -430,8 +440,12 @@ class MeshEngine(
         val copies = if (mode == Protocol.MODE_MARL && sos) 2 else 1
         stats[mode]!!.originated++
         if (sos) stats[mode]!!.sosOriginated++
+        val fc = forecastFor(dst, t)
         messages.add(ChatMsg(msgId, dst, nameOf(dst), text, true, tri.intent, "sent", t, mode = mode,
-            note = if (tri.wireBytes < tri.rawBytes) "${tri.rawBytes}→${tri.wireBytes} B" else ""))
+            note = if (tri.wireBytes < tri.rawBytes) "${tri.rawBytes}→${tri.wireBytes} B" else "",
+            fcKind = fc.kind, fcMs = fc.etaMs, fcP = fc.p))
+        log.write("FORECAST", mode = mode, msg = msgId, dst = dst, hops = fc.hops,
+            value = "${Forecast.KIND_NAMES[fc.kind]};eta=${fc.etaMs};p=${String.format(Locale.US, "%.2f", fc.p)}")
         log.write("ORIG", mode = mode, msg = msgId, dst = dst, bytes = tri.wireBytes, value = "${tri.intent};raw=${tri.rawBytes}")
         val base = Frame.Data(msgId, 0, myId, dst, t, emptyList(), tri.urgency, tri.intent, tri.wireText, mode, Protocol.FLOOD_TTL, nick)
         if (mode == Protocol.MODE_FLOOD) {
@@ -529,6 +543,7 @@ class MeshEngine(
         val f = Frame.decode(bytes)
         heardFrom(when (f) {
             is Frame.Hello -> f.src
+            is Frame.CensusMsg -> f.src
             is Frame.Announce -> f.from
             is Frame.Data -> f.path.lastOrNull()
             is Frame.HopAck -> f.src
@@ -537,6 +552,7 @@ class MeshEngine(
         })
         when (f) {
             is Frame.Hello -> onHello(f)
+            is Frame.CensusMsg -> census.merge(census.decode(f.sketches), now())
             is Frame.Announce -> onAnnounce(f)
             is Frame.Data -> onData(f, bytes.size)
             is Frame.HopAck -> onHopAck(f)
@@ -595,6 +611,7 @@ class MeshEngine(
         log.write("DELIVER", mode = d.mode, msg = d.msgId, src = d.src, dst = myId, hops = d.path.size,
             value = "copy=${d.copy};intent=${d.intent}")
         if (!deliveredHere.add(d.msgId)) return
+        if (d.intent == Triage.SOS) sosReceived.add(d.msgId)
         messages.add(ChatMsg(d.msgId, d.src, nameOf(d.src), d.text, false, d.intent, "received", now(),
             hops = d.path.size, mode = d.mode))
         val route = d.path + myId
@@ -615,6 +632,10 @@ class MeshEngine(
         m.status = "delivered"
         m.rttMs = rtt
         m.hops = k.hops
+        if (m.fcKind in 0..2 && m.fcMs > 0) {
+            forecast.onResult(m.fcKind, m.fcMs, rtt)
+            log.write("FORECAST_RESULT", mode = m.mode, msg = m.id, value = "${Forecast.KIND_NAMES[m.fcKind]};predicted=${m.fcMs};actual=$rtt")
+        }
         stats[m.mode]?.let {
             it.confirmed++
             it.rttSum += rtt
@@ -692,6 +713,58 @@ class MeshEngine(
 
     // ---------------------------------------------------------------- helpers
 
+    // ------------------------------------------------------------ census
+
+    /** Count ourselves and our SOS calls, then gossip the sketches to neighbours that have not seen the latest. */
+    private fun processCensus(t: Long) {
+        census.add(Census.PEOPLE, myId, t)
+        for (m in messages) {
+            if (m.intent != Triage.SOS || t - m.time > 2 * 3_600_000L) continue
+            census.add(Census.SOS, m.id, t)
+            if (!m.outgoing || m.status == "delivered") census.add(Census.ANSWERED, m.id, t)
+        }
+        for (id in sosReceived) { census.add(Census.SOS, id, t); census.add(Census.ANSWERED, id, t) }
+        val c = census.counts(t)
+        val line = "phones=${c.phones};sos=${c.sos};answered=${c.answered}"
+        if (line != lastCensusLog) { lastCensusLog = line; log.write("CENSUS", value = line) }
+        if (sinkhole) return
+        for (n in neighbors.values) {
+            if (!inRange(n, t)) continue
+            val (v, at) = censusSent[n.id] ?: (-1 to 0L)
+            if ((v != census.version && t - at > 4_000) || t - at > 60_000) {
+                censusSent[n.id] = census.version to t
+                sendFrame(n.id, Frame.CensusMsg(myId, census.encode(t))) {}
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ forecast
+
+    private fun directLink(id: String, t: Long): Double? {
+        val n = neighbors[id] ?: return null
+        if (!inRange(n, t) || id in router.quarantined) return null
+        return MarlRouter.packetSuccessProb(n.rssi.toInt()).takeIf { it >= 0.5 }
+    }
+
+    private fun freshRoute(id: String, t: Long): Route? {
+        val r = routes[id] ?: return null
+        val via = neighbors[r.via] ?: return null
+        return r.takeIf { t - it.heardAt < 60_000 && inRange(via, t) && via.id !in router.quarantined }
+    }
+
+    private fun forecastFor(id: String, t: Long): Forecast.Prediction =
+        forecast.predict(id, directLink(id, t), freshRoute(id, t)?.hops, t)
+
+    /** Learn, for every phone we know, how long it tends to stay out of reach. */
+    private fun observeReach(t: Long) {
+        for (id in known.keys) {
+            if (id == myId) continue
+            val direct = directLink(id, t) != null
+            val r = freshRoute(id, t)
+            forecast.observe(id, direct || r != null, if (direct) 1 else r?.hops ?: 0, t)
+        }
+    }
+
     private fun now() = clock()
 
     private fun battery(): Int = batteryLevel?.invoke() ?: try {
@@ -720,15 +793,21 @@ class MeshEngine(
                 )
             },
             nickSet = nickSet,
+            census = census.counts(t).let { c ->
+                UiCensus(c.phones, c.sos, c.answered, c.saturated, neighbors.values.count { inRange(it, t) })
+            },
+            forecastAccuracy = forecast.accuracy(),
             known = (known.keys + routes.keys).filter { it != myId }.distinct().map { id ->
                 val nb = neighbors[id]
                 val present = nb != null && inRange(nb, t)
                 val r = routes[id]
                 val heard = maxOf(nb?.lastSeen ?: 0L, r?.heardAt ?: 0L)
+                val fc = forecastFor(id, t)
                 KnownPhone(
                     id = id, name = nameOf(id), present = present,
                     hops = if (present) 1 else r?.hops ?: 0,
                     heardAgoS = if (heard > 0) ((t - heard) / 1000).toInt() else -1,
+                    fcKind = fc.kind, fcMs = fc.etaMs, fcP = fc.p, fcOutageMs = fc.meanOutageMs,
                 )
             }.sortedWith(compareBy({ !it.present }, { if (it.hops == 0) 99 else it.hops }, { it.name.lowercase() })),
             messages = messages.takeLast(100).map { it.copy() },
@@ -768,10 +847,22 @@ data class ChatMsg(
     var hops: Int = 0,
     val mode: String = "",
     val note: String = "",
+    /** Delivery forecast made when it was sent (see Forecast.kt). */
+    val fcKind: Int = Forecast.NONE,
+    val fcMs: Long = -1,
+    val fcP: Double = -1.0,
 )
 
 /** A phone you can message: in direct range, or known through name announcements. */
-data class KnownPhone(val id: String, val name: String, val present: Boolean, val hops: Int, val heardAgoS: Int)
+data class KnownPhone(
+    val id: String, val name: String, val present: Boolean, val hops: Int, val heardAgoS: Int,
+    val fcKind: Int = Forecast.NONE, val fcMs: Long = -1, val fcP: Double = -1.0, val fcOutageMs: Long = 0,
+)
+
+/** Whole-mesh estimate from the census sketches, plus how many phones this one hears directly. */
+data class UiCensus(val phones: Int = 1, val sos: Int = 0, val answered: Int = 0, val saturated: Boolean = false, val direct: Int = 0) {
+    val unanswered get() = (sos - answered).coerceAtLeast(0)
+}
 
 data class UiNeighbor(
     val id: String,
@@ -799,6 +890,8 @@ data class UiState(
     val battery: Int = 100,
     val neighbors: List<UiNeighbor> = emptyList(),
     val nickSet: Boolean = false,
+    val census: UiCensus = UiCensus(),
+    val forecastAccuracy: Forecast.Accuracy = Forecast.Accuracy(0, 0, 0),
     val known: List<KnownPhone> = emptyList(),
     val messages: List<ChatMsg> = emptyList(),
     val stats: Map<String, ModeStats> = emptyMap(),
