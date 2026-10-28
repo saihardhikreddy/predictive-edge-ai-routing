@@ -64,6 +64,7 @@ def one_run(job: Dict) -> Dict:
         ids_enabled=ids,
         traffic_interval_s=job["traffic_interval"],
         cold_start=job.get("cold_start", False),
+        long_range=job.get("long_range", False),
     )
     e.protocol_mode = mode
     dt = 0.1

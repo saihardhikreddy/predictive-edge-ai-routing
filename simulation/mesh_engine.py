@@ -192,6 +192,12 @@ class MeshSimulationEngine:
     # energy (battery % per byte)
     E_TX_PER_BYTE = 0.0004
     E_RX_PER_BYTE = 0.00025
+    # Bluetooth 5 Long Range (LE Coded PHY, S=8): ~12 dB more sensitivity -> about 2x the range,
+    # but each bit is sent 8 times, so a coded frame costs ~8x the airtime/energy and is slower.
+    CODED_GAIN_DB = 12
+    CODED_RANGE_X = 2.0
+    CODED_ENERGY_X = 8.0
+    CODED_HOP_TIME_X = 2.0
 
     def __init__(
         self,
@@ -205,9 +211,12 @@ class MeshSimulationEngine:
         warmup_s: float = 20.0,
         mobility_scale: float = 1.0,
         cold_start: bool = False,
+        long_range: bool = False,
     ):
         self.mobility_scale = mobility_scale
         self.cold_start = cold_start
+        self.long_range = long_range
+        self.coded = set()  # frozenset({a, b}) for links that exist only over Long Range
         self.seed = seed if seed is not None else random.randrange(1 << 30)
         self.mob_rng = random.Random(self.seed)
         self.rng = random.Random(self.seed + 1)
@@ -351,6 +360,8 @@ class MeshSimulationEngine:
         old_adj = getattr(self, "adj", {})
         self.edges = []
         self.adj = {nid: {} for nid in self.nodes}
+        self.coded = set()
+        max_range = self.BLE_RANGE_PX * (self.CODED_RANGE_X if getattr(self, "long_range", False) else 1.0)
         ids = list(self.nodes.keys())
         for i in range(len(ids)):
             n1 = self.nodes[ids[i]]
@@ -361,9 +372,13 @@ class MeshSimulationEngine:
                 if not n2.alive:
                     continue
                 dist = math.hypot(n1.x - n2.x, n1.y - n2.y)
-                if dist <= self.BLE_RANGE_PX:
+                if dist <= max_range:
                     norm = max(dist / 10.0, 1.0)
                     rssi = int(-40.0 - self.PATHLOSS_EXP_DB * math.log10(norm) + self.mob_rng.gauss(0, 2.0))
+                    if dist > self.BLE_RANGE_PX:
+                        # beyond 1M range: only reachable over Coded PHY; use its sensitivity gain
+                        self.coded.add(frozenset((n1.id, n2.id)))
+                        rssi += self.CODED_GAIN_DB
                     rssi = max(min(rssi, -30), -95)
                     self.edges.append((n1.id, n2.id, dist, rssi))
                     self.adj[n1.id][n2.id] = rssi
@@ -638,7 +653,8 @@ class MeshSimulationEngine:
         mm = self.m["marl"]
         mm["data_tx"] += 1
         mm["data_bytes"] += pkt.payload_size_bytes
-        mm["energy"] += self._charge(x, pkt.payload_size_bytes, True)
+        cx = self.CODED_ENERGY_X if frozenset((x.id, choice)) in self.coded else 1.0
+        mm["energy"] += self._charge(x, int(pkt.payload_size_bytes * cx), True)
         x.packets_routed += 1
         x.status = "RELAYING"
 
@@ -661,7 +677,8 @@ class MeshSimulationEngine:
             pkt.next_hop = None
             pkt.next_decision_at = self.sim_time + self.DECISION_INTERVAL_S
             return
-        mm["energy"] += self._charge(y, pkt.payload_size_bytes, False)
+        cx = self.CODED_ENERGY_X if frozenset((x.id, y_id)) in self.coded else 1.0
+        mm["energy"] += self._charge(y, int(pkt.payload_size_bytes * cx), False)
         x.held_packets = max(0, x.held_packets - 1)
         pkt.hops += 1
         # 2ACK (Liu et al., 2007): x just relayed, so x's predecessor learns that
@@ -763,7 +780,8 @@ class MeshSimulationEngine:
                 if self.sim_time >= pkt.next_decision_at:
                     self._decide(pkt)
             else:
-                pkt.progress += dt / self.HOP_TIME_S
+                slow = self.CODED_HOP_TIME_X if frozenset((pkt.holder, pkt.next_hop)) in self.coded else 1.0
+                pkt.progress += dt / (self.HOP_TIME_S * slow)
                 if pkt.progress >= 1.0:
                     self._complete_hop(pkt)
         done = [p for p in self.active_packets if p.completed or p.failed]
@@ -801,7 +819,9 @@ class MeshSimulationEngine:
             slot = {b: self.rng.randrange(self.FLOOD_SLOTS) for b in broadcasters}
             tx += len(broadcasters)
             for b in broadcasters:
-                energy += self._charge(self.nodes[b], nbytes, True)
+                # a phone with Long-Range-only neighbours must also broadcast on Coded PHY
+                far = any(frozenset((b, r)) in self.coded for r in self.adj.get(b, {}))
+                energy += self._charge(self.nodes[b], int(nbytes * (1 + (self.CODED_ENERGY_X if far else 0))), True)
             heard: Dict[str, List[str]] = {}
             for b in broadcasters:
                 for r in self.adj.get(b, {}):
@@ -812,7 +832,8 @@ class MeshSimulationEngine:
                 if not rn.alive:
                     continue
                 for s in senders:
-                    energy += self._charge(rn, nbytes, False)
+                    cx = self.CODED_ENERGY_X if frozenset((s, r)) in self.coded else 1.0
+                    energy += self._charge(rn, int(nbytes * cx), False)
                 rx += len(senders)
                 ok = [s for s in senders if sum(1 for t in senders if slot[t] == slot[s]) == 1]
                 coll += len(senders) - len(ok)
