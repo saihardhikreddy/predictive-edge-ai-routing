@@ -246,6 +246,86 @@ class MeshScenarioTest {
         assertEquals("Charan", inbox[0].peerName)
     }
 
+    // ------------------------------------------------------- survivor census
+
+    @Test
+    fun census_countsTheWholeChain_eachPhoneHearsOnlyItsNeighbours() {
+        phone("A", 0.0); phone("B", 10.0); phone("C", 20.0); phone("D", 30.0); phone("E", 40.0)
+        run(90.0)
+        val c = st("A").census
+        println("census scenario: A hears ${c.direct} phone directly and estimates ${c.phones} phones in the mesh (truth: 5)")
+        assertEquals(1, c.direct)
+        assertEquals(5, c.phones)
+        assertEquals(5, st("E").census.phones)
+    }
+
+    @Test
+    fun census_talliesSosCallsAndWhichWereAnswered() {
+        phone("A", 0.0); phone("B", 10.0); phone("C", 20.0)
+        run(40.0)
+        phones.getValue("C").send(id("A"), "SOS fire on the second floor, we are trapped!")
+        phones.getValue("B").send("DEADBEEF", "SOS injured people need medical help") // nobody has this id: never answered
+        run(60.0)
+        val c = st("A").census
+        println("census scenario: A counts ${c.sos} SOS calls, ${c.answered} answered, ${c.unanswered} waiting")
+        assertEquals(2, c.sos)
+        assertEquals(1, c.answered)
+        assertEquals(1, st("C").census.unanswered)
+    }
+
+    // ------------------------------------------------------- delivery forecast
+
+    private fun forecastReport(label: String, ms: List<ChatMsg>): Double {
+        val done = ms.filter { it.status == "delivered" && it.fcMs > 0 }
+        val good = done.count { kotlin.math.abs(it.rttMs - it.fcMs) <= maxOf(1_000L, it.fcMs / 2) }
+        val errs = done.map { kotlin.math.abs(it.rttMs - it.fcMs) * 100.0 / it.fcMs }.sorted()
+        println("forecast scenario ($label): ${done.size} delivered, $good within ±50 % (or 1 s) of the forecast, median error ${errs.getOrNull(errs.size / 2)?.toInt()} %, " +
+            done.joinToString(prefix = "[", postfix = "]") { "${it.fcMs}->${it.rttMs}" })
+        return if (done.isEmpty()) 0.0 else good.toDouble() / done.size
+    }
+
+    @Test
+    fun forecast_direct_and_routed_matchMeasuredTimes() {
+        phone("A", 0.0); phone("B", 2.0); phone("C", 1.0, 2.0)
+        phone("X", 40.0); phone("Y", 50.0); phone("Z", 60.0) // a separate chain X–Y–Z
+        run(45.0)
+        repeat(8) { i -> phones.getValue("A").send(id("C"), "same room $i"); run(4.0) }
+        repeat(8) { i -> phones.getValue("X").send(id("Z"), "two hops $i"); run(6.0) }
+        run(15.0)
+        val direct = sent("A", "C")
+        val routed = sent("X", "Z")
+        assertTrue(direct.all { it.fcKind == Forecast.DIRECT })
+        assertTrue(routed.all { it.fcKind == Forecast.ROUTED })
+        val d = forecastReport("direct", direct.drop(2))
+        val r = forecastReport("2 hops", routed.drop(2))
+        assertTrue("direct forecasts should mostly hold", d >= 0.6)
+        assertTrue("routed forecasts should mostly hold", r >= 0.6)
+    }
+
+    @Test
+    fun forecast_learnsHowLongAFriendIsOutOfReach() {
+        // C is only reachable through B, who keeps walking away for ~40 s and back for ~20 s
+        phone("A", 0.0); phone("B", 10.0); phone("C", 20.0)
+        run(40.0)
+        repeat(4) { move("B", 100.0); run(40.0); move("B", 10.0); run(20.0) }
+        move("B", 100.0)
+        run(16.0) // the route has expired: A has no path to C
+        val k = st("A").known.first { it.id == id("C") }
+        println("forecast scenario (carry): A predicts ${k.fcMs} ms, ${(k.fcP * 100).toInt()} % within 10 min, learned outage ${k.fcOutageMs} ms")
+        assertEquals(Forecast.CARRY, k.fcKind)
+        phones.getValue("A").send(id("C"), "are you okay?")
+        run(24.0)
+        move("B", 10.0)
+        run(40.0)
+        val m = lastSent("A", "C")
+        println("forecast scenario (carry): predicted ${m.fcMs} ms, took ${m.rttMs} ms")
+        assertEquals("delivered", m.status)
+        assertTrue("outage learned (${k.fcOutageMs} ms)", k.fcOutageMs in 25_000..70_000)
+        // the forecast treats the wait as memoryless, so on a strict walking timetable it can be off;
+        // it must still be the right order of magnitude
+        assertTrue("carry forecast within a factor of 3", m.rttMs in m.fcMs / 3..m.fcMs * 3)
+    }
+
     // ------------------------------------------------------- attack
 
     @Test
