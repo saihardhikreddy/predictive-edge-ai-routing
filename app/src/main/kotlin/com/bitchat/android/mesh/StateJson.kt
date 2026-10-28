@@ -14,6 +14,8 @@ fun UiState.toJson(): String {
     o.put("sinkhole", sinkhole)
     o.put("triageOn", triageOn)
     o.put("rangeDbm", rangeDbm)
+    o.put("longRangeOn", longRangeOn)
+    o.put("longRangeSupported", longRangeSupported)
     o.put("battery", battery)
     o.put("neighbors", JSONArray().apply {
         neighbors.forEach { n ->
@@ -21,7 +23,7 @@ fun UiState.toJson(): String {
                 put("id", n.id); put("nick", n.nick); put("rssi", n.rssi); put("battery", n.battery)
                 put("present", n.present); put("seenAgoS", n.seenAgoS); put("linkQ", n.linkQ)
                 put("reputation", n.reputation); put("anomaly", n.anomaly)
-                put("quarantined", n.quarantined); put("blocked", n.blocked)
+                put("quarantined", n.quarantined); put("blocked", n.blocked); put("longRange", n.longRange)
             })
         }
     })

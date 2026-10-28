@@ -157,6 +157,7 @@ class MainActivity : ComponentActivity() {
                 "setSinkhole" -> engine.setSinkhole(a.optBoolean(0))
                 "setTriage" -> engine.setTriage(a.optBoolean(0, true))
                 "setRange" -> engine.setRange(a.optInt(0, -100))
+                "setLongRange" -> engine.setLongRange(a.optBoolean(0, true))
                 "setNick" -> engine.setNick(a.optString(0))
                 "toggleBlock" -> engine.toggleBlock(a.optString(0))
                 "send" -> engine.send(a.optString(0), a.optString(1))

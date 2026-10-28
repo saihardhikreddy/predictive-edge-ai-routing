@@ -73,6 +73,8 @@ class MeshEngine(
     private var triageOn = true
     private var rangeDbm = -100
     private val blocked = HashSet<String>()
+    /** Bluetooth 5 Long Range (LE Coded PHY) for far neighbours, when the phone supports it. */
+    private var longRangeOn = true
 
     // --------------------------------------------------------------- state
 
@@ -86,7 +88,17 @@ class MeshEngine(
         var p: Map<String, Double> = emptyMap()
         var wasInRange = false
         var lastLeft = 0L
+        /** Last time a normal (1M PHY) advert arrived; if it is stale but Long Range adverts keep coming, the link is Long Range. */
+        var lastLegacy = 0L
+        var lastCoded = 0L
+        /** Reached only over Bluetooth 5 Long Range right now. */
+        fun longRange(t: Long) = t - lastCoded < 12_000 && t - lastLegacy > 6_000
     }
+
+    /** Coded PHY buys about 12 dB of sensitivity, so the same RSSI is a better link over Long Range. */
+    private val codedGainDb = 12
+
+    private fun effRssi(n: Neighbor, t: Long = now()) = n.rssi.toInt() + if (n.longRange(t)) codedGainDb else 0
 
     private class Stored(
         val data: Frame.Data,
@@ -196,6 +208,12 @@ class MeshEngine(
     fun setSinkhole(on: Boolean) = handler.post { sinkhole = on; log.write("SINKHOLE_MODE", value = on.toString()); publish() }
     fun setTriage(on: Boolean) = handler.post { triageOn = on; publish() }
     fun setRange(dbm: Int) = handler.post { rangeDbm = dbm; log.write("RANGE", value = dbm.toString()); publish() }
+    fun setLongRange(on: Boolean) = handler.post {
+        longRangeOn = on
+        transport.setLongRange(on)
+        log.write("LONG_RANGE_MODE", value = on.toString())
+        publish()
+    }
     fun setNick(n: String) = handler.post {
         val clean = n.trim().take(24)
         if (clean.isEmpty()) return@post
@@ -281,7 +299,7 @@ class MeshEngine(
 
     /** Phones pause BLE adverts for several seconds at a time, so allow 12 s of silence. */
     private fun inRange(n: Neighbor, t: Long = now()) =
-        t - n.lastSeen < 12_000 && n.rssi >= rangeDbm && n.id !in blocked && n.device != null
+        t - n.lastSeen < 12_000 && effRssi(n, t) >= rangeDbm && n.id !in blocked && n.device != null
 
     /** A frame written to our inbox proves its sender is still in direct range. */
     private fun heardFrom(id: String?) {
@@ -298,6 +316,10 @@ class MeshEngine(
         n.lastSeen = t
         n.battery = adv.battery
         n.buffer = adv.buffer
+        if (adv.longRange) {
+            if (n.lastCoded == 0L || t - n.lastCoded > 30_000) log.write("LONG_RANGE_LINK", peer = adv.nodeId, rssi = rssi)
+            n.lastCoded = t
+        } else n.lastLegacy = t
         known.putIfAbsent(adv.nodeId, n.nick)
         val r = inRange(n, t)
         if (r && !n.wasInRange) {
@@ -336,7 +358,7 @@ class MeshEngine(
 
     private fun neighborInfos(exclude: Set<String>): List<MarlRouter.NeighborInfo> =
         neighbors.values.filter { inRange(it) && it.id !in exclude && it.id !in router.quarantined }.map {
-            MarlRouter.NeighborInfo(it.id, it.rssi.toInt(), it.battery.toDouble(), it.buffer.toDouble(), effectiveP(it))
+            MarlRouter.NeighborInfo(it.id, effRssi(it), it.battery.toDouble(), it.buffer.toDouble(), effectiveP(it))
         }
 
     /**
@@ -420,7 +442,8 @@ class MeshEngine(
             else -> ""
         }
         val sentAt = now()
-        transport.send(dev, bytes) { ok ->
+        val lr = longRangeOn && n.longRange(sentAt)
+        transport.send(dev, bytes, lr) { ok ->
             if (frame is Frame.Data) forecast.onHop(now() - sentAt, ok)
             txFrames++
             txBytes += bytes.size
@@ -743,7 +766,7 @@ class MeshEngine(
     private fun directLink(id: String, t: Long): Double? {
         val n = neighbors[id] ?: return null
         if (!inRange(n, t) || id in router.quarantined) return null
-        return MarlRouter.packetSuccessProb(n.rssi.toInt()).takeIf { it >= 0.5 }
+        return MarlRouter.packetSuccessProb(effRssi(n, t)).takeIf { it >= 0.5 }
     }
 
     private fun freshRoute(id: String, t: Long): Route? {
@@ -782,12 +805,15 @@ class MeshEngine(
             sinkhole = sinkhole,
             triageOn = triageOn,
             rangeDbm = rangeDbm,
+            longRangeOn = longRangeOn,
+            longRangeSupported = transport.longRangeSupported,
             battery = battery(),
             neighbors = neighbors.values.sortedByDescending { it.rssi }.map {
                 UiNeighbor(
                     id = it.id, nick = nameOf(it.id), rssi = it.rssi.toInt(), battery = it.battery,
                     present = inRange(it, t), seenAgoS = ((t - it.lastSeen) / 1000).toInt(),
-                    linkQ = MarlRouter.packetSuccessProb(it.rssi.toInt()),
+                    linkQ = MarlRouter.packetSuccessProb(effRssi(it, t)),
+                    longRange = it.longRange(t),
                     reputation = router.reputation(it.id), anomaly = router.anomalyScore(it.id),
                     quarantined = it.id in router.quarantined, blocked = it.id in blocked,
                 )
@@ -876,6 +902,8 @@ data class UiNeighbor(
     val anomaly: Double,
     val quarantined: Boolean,
     val blocked: Boolean,
+    /** Reached over Bluetooth 5 Long Range (LE Coded PHY). */
+    val longRange: Boolean = false,
 )
 
 data class UiState(
@@ -887,6 +915,8 @@ data class UiState(
     val sinkhole: Boolean = false,
     val triageOn: Boolean = true,
     val rangeDbm: Int = -100,
+    val longRangeOn: Boolean = true,
+    val longRangeSupported: Boolean = false,
     val battery: Int = 100,
     val neighbors: List<UiNeighbor> = emptyList(),
     val nickSet: Boolean = false,
