@@ -13,6 +13,9 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
+import android.bluetooth.le.AdvertisingSet
+import android.bluetooth.le.AdvertisingSetCallback
+import android.bluetooth.le.AdvertisingSetParameters
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
@@ -24,7 +27,11 @@ import java.io.ByteArrayOutputStream
 
 /**
  * Bluetooth LE plumbing, kept dumb on purpose:
- *  - advertises a 6-byte service-data beacon (node id, battery, buffer)
+ *  - advertises a 6-byte service-data beacon (node id, battery, buffer), at high transmit power
+ *  - when the phone supports Bluetooth 5 Long Range (LE Coded PHY), also advertises the same
+ *    beacon as an extended advertisement on the Coded PHY, scans on every PHY, and connects to
+ *    far neighbours over Coded PHY. Coded PHY repeats each bit (S=8), buying about 12 dB of
+ *    sensitivity: roughly 2x the distance indoors and up to 4x outdoors, at 125 kbit/s.
  *  - scans for other testbed phones
  *  - runs a GATT server with one writable "inbox" characteristic
  *  - sends frames by connecting as a GATT client and writing to the peer's inbox
@@ -48,6 +55,24 @@ class BleTransport(
     private val serviceParcel = ParcelUuid(Protocol.SERVICE_UUID)
 
     override val isEnabled: Boolean get() = adapter?.isEnabled == true
+
+    override val longRangeSupported: Boolean
+        get() = try {
+            val a = adapter
+            a != null && a.isLeCodedPhySupported && a.isLeExtendedAdvertisingSupported
+        } catch (_: Exception) { false }
+
+    private var longRangeOn = true
+    private var lastAdvert: ByteArray? = null
+    private var codedSet = false
+
+    override fun setLongRange(on: Boolean) {
+        if (on == longRangeOn) return
+        longRangeOn = on
+        if (stopped) return
+        lastAdvert?.let { startAdvertising(it) }
+        restartScan()
+    }
 
     // ----------------------------------------------------------- lifecycle
 
@@ -85,9 +110,10 @@ class BleTransport(
     override fun startAdvertising(advert: ByteArray) {
         val adv = adapter?.bluetoothLeAdvertiser ?: run { onError("This phone cannot advertise over BLE"); return }
         stopAdvertising()
+        lastAdvert = advert
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH) // more range for a few mW
             .setConnectable(true)
             .setTimeout(0)
             .build()
@@ -102,12 +128,42 @@ class BleTransport(
         } catch (e: Exception) {
             onError("Advertising error: ${e.message}")
         }
+        if (longRangeOn && longRangeSupported) startCodedAdvertising(data)
+    }
+
+    /** The same beacon as a connectable extended advertisement on LE Coded PHY (Long Range). */
+    private val codedCallback = object : AdvertisingSetCallback() {
+        override fun onAdvertisingSetStarted(set: AdvertisingSet?, txPower: Int, status: Int) {
+            codedSet = status == ADVERTISE_SUCCESS
+            // not fatal and not shown: the normal 1M beacon keeps working
+        }
+    }
+
+    private fun startCodedAdvertising(data: AdvertiseData) {
+        val adv = adapter?.bluetoothLeAdvertiser ?: return
+        val params = AdvertisingSetParameters.Builder()
+            .setLegacyMode(false)
+            .setConnectable(true)
+            .setScannable(false)
+            .setPrimaryPhy(BluetoothDevice.PHY_LE_CODED)
+            .setSecondaryPhy(BluetoothDevice.PHY_LE_CODED)
+            .setInterval(AdvertisingSetParameters.INTERVAL_LOW)
+            .setTxPowerLevel(AdvertisingSetParameters.TX_POWER_HIGH)
+            .build()
+        try {
+            adv.startAdvertisingSet(params, data, null, null, null, codedCallback)
+        } catch (e: Exception) {
+            codedSet = false
+        }
     }
 
     private fun stopAdvertising() {
-        if (!advertising) return
-        try { adapter?.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback) } catch (_: Exception) {}
-        advertising = false
+        if (advertising) {
+            try { adapter?.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback) } catch (_: Exception) {}
+            advertising = false
+        }
+        try { adapter?.bluetoothLeAdvertiser?.stopAdvertisingSet(codedCallback) } catch (_: Exception) {}
+        codedSet = false
     }
 
     // ------------------------------------------------------------ scanning
@@ -115,7 +171,8 @@ class BleTransport(
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val sd = result.scanRecord?.getServiceData(serviceParcel) ?: return
-            val adv = Protocol.parseAdvert(sd) ?: return
+            val parsed = Protocol.parseAdvert(sd) ?: return
+            val adv = parsed.copy(longRange = result.primaryPhy == BluetoothDevice.PHY_LE_CODED)
             val rssi = result.rssi
             val dev = result.device
             handler.post { onAdvert(adv, dev, rssi) }
@@ -133,16 +190,26 @@ class BleTransport(
 
     private fun startScan() {
         val scanner = adapter?.bluetoothLeScanner ?: run { onError("BLE scanner unavailable"); return }
-        val settings = ScanSettings.Builder()
+        val b = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .setReportDelay(0)
-            .build()
+        if (longRangeOn && longRangeSupported) {
+            // report extended (Long Range) adverts as well as legacy ones, on every PHY
+            b.setLegacy(false).setPhy(ScanSettings.PHY_LE_ALL_SUPPORTED)
+        }
+        val settings = b.build()
         try {
             scanner.startScan(null, settings, scanCallback)
             scanning = true
         } catch (e: Exception) {
             onError("Scan error: ${e.message}")
         }
+    }
+
+    private fun restartScan() {
+        try { if (scanning) adapter?.bluetoothLeScanner?.stopScan(scanCallback) } catch (_: Exception) {}
+        scanning = false
+        startScan()
     }
 
     // --------------------------------------------------------- GATT server
@@ -193,7 +260,7 @@ class BleTransport(
 
     // ---------------------------------------------------------- GATT client
 
-    private class Outgoing(val device: BluetoothDevice, val bytes: ByteArray, val attempt: Int, val cb: (Boolean) -> Unit)
+    private class Outgoing(val device: BluetoothDevice, val bytes: ByteArray, val attempt: Int, val cb: (Boolean) -> Unit, val longRange: Boolean = false)
 
     private val queue = ArrayDeque<Outgoing>()
     private var current: Outgoing? = null
@@ -201,10 +268,13 @@ class BleTransport(
     private val timeout = Runnable { finish(false) }
 
     /** Queue a frame for [device]; [cb] runs on the engine thread with true if the write was acknowledged. */
-    override fun send(peer: Any, bytes: ByteArray, cb: (Boolean) -> Unit) {
+    override fun send(peer: Any, bytes: ByteArray, cb: (Boolean) -> Unit) = send(peer, bytes, false, cb)
+
+    override fun send(peer: Any, bytes: ByteArray, longRange: Boolean, cb: (Boolean) -> Unit) {
         val device = peer as? BluetoothDevice ?: run { cb(false); return }
+        val lr = longRange && longRangeOn && longRangeSupported
         handler.post {
-            queue.addLast(Outgoing(device, bytes, 0, cb))
+            queue.addLast(Outgoing(device, bytes, 0, cb, lr))
             pump()
         }
     }
@@ -217,7 +287,9 @@ class BleTransport(
         current = o
         handler.postDelayed(timeout, 10_000)
         gatt = try {
-            o.device.connectGatt(context, false, clientCallback, BluetoothDevice.TRANSPORT_LE)
+            // a far neighbour heard only over Long Range must be connected over Coded PHY too
+            val phy = if (o.longRange) BluetoothDevice.PHY_LE_CODED_MASK else BluetoothDevice.PHY_LE_1M_MASK
+            o.device.connectGatt(context, false, clientCallback, BluetoothDevice.TRANSPORT_LE, phy)
         } catch (e: Exception) {
             null
         }
@@ -238,7 +310,7 @@ class BleTransport(
         }
         if (!ok && o.attempt == 0) {
             // one quick retry: status 133 on the first connect is common on Android
-            queue.addFirst(Outgoing(o.device, o.bytes, 1, o.cb))
+            queue.addFirst(Outgoing(o.device, o.bytes, 1, o.cb, o.longRange))
         } else {
             o.cb(ok)
         }
