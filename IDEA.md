@@ -60,6 +60,22 @@ in CI. Limitation: the memoryless assumption is wrong for strictly periodic move
 
 Neither feature exists in BitChat, Briar or Bridgefy as far as we know.
 
+## 3c. Bluetooth 5 Long Range (October 2026)
+
+The app now uses **LE Coded PHY** ("Long Range") where the phone supports it: the same beacon is also sent as an
+extended advertisement on Coded PHY, scanning covers every PHY, and a neighbour heard only over Coded PHY is
+connected over Coded PHY. Coded PHY repeats each bit (S=8), buying about 12 dB of sensitivity, roughly 2x the
+range indoors, at 125 kbit/s. Normal links keep the fast 1M PHY; the router sees far links with their true,
+coded-adjusted link quality, so it chooses per hop between a fast short link and a slow long one.
+
+Measured in the simulator (`tools/long_range_benchmark.py`, 6 seeds x 300 s; Coded frames charged 8x energy and
+2x hop time): with learned routing, delivery rises to **0.99 at 8, 16 and 32 phones** (from 0.76 / 0.89 / 0.92),
+hops roughly halve and latency drops to about 2.5 s, for +60-70 % energy per delivered message. With flooding,
+Long Range costs 4-9x the energy and at 32 phones *lowers* delivery (0.96 -> 0.88) through collisions. The
+lesson: range and routing must be designed together; more range only pays off with unicast, learned routing.
+On virtual phones: two phones 16 m apart cannot talk on normal BLE but deliver in 1 hop over Long Range; a mesh
+split into three islands joins; a 5-phone chain drops below 4 hops; older phones keep working on 1M PHY.
+
 ## 4. What the results honestly say (put this on a slide; examiners respect it)
 
 1. **The energy and collision win is real and grows with density.** Flooding's cost grows with neighbourhood size; unicast routing's doesn't.
