@@ -16,6 +16,8 @@ export function createDemoEngine(emit) {
     txFrames: 0, txFails: 0, txBytes: 0, stored: 0, queue: 0,
     weights: [0, 7, 0.5, 1, -1.5, 10, -0.3], samples: 0, flRounds: 0, predictability: [],
     expRemaining: 0, expTotal: 0, logTail: [], events: [],
+    census: { phones: 1, sos: 0, answered: 0, unanswered: 0, saturated: false, direct: 0 },
+    forecastAccuracy: { n: 0, good: 0, medianErrPct: 0 },
   };
   const phones = NAMES.slice(0, 4).map(([id, nick], i) => ({ id, nick, base: -58 - i * 9, phase: i * 1.7 }));
   let exp = null;
@@ -46,8 +48,16 @@ export function createDemoEngine(emit) {
       s.known = NAMES.map(([id, nick], i) => {
         const nb = s.neighbors.find((n) => n.id === id);
         const present = !!nb?.present;
-        return [id, nick, present ? 1 : 3, present ? 0 : 12 + (i * 7) % 20, present];
+        const lq = nb?.linkQ ?? 0.9;
+        return present
+          ? [id, nick, 1, 0, true, 0, 1400, Math.min(0.99, 0.9 + lq * 0.09), 0]
+          : [id, nick, 3, 12 + (i * 7) % 20, false, 1, 4600, 0.86, 0];
       });
+      s.known.push(["F1A2B3C4", "Medical tent", 0, 240, false, 2, 252000, 0.91, 214000]);
+      const direct = s.neighbors.filter((n) => n.present).length;
+      const sosOut = s.messages.filter((m) => m.intent === "EMERGENCY_SOS");
+      const sosDone = sosOut.filter((m) => m.status === "delivered").length;
+      s.census = { phones: 9, sos: 2 + sosOut.length, answered: 1 + sosDone, unanswered: 1 + sosOut.length - sosDone, saturated: false, direct };
       s.predictability = s.neighbors.slice(0, 4).map((n, i) => [n.nick, +(0.8 - i * 0.17).toFixed(2)]);
       if (Math.random() < 0.08) { const p = phones[(Math.random() * phones.length) | 0]; ev("TX_OK", { peer: p.id, value: "Hello" }); }
       if (exp && exp.left > 0 && Date.now() >= exp.next) { exp.left--; exp.next = Date.now() + exp.iv; send(NAMES[(Math.random() * NAMES.length) | 0][0], Math.random() < exp.sos ? SOS[0] : ROUTINE[(Math.random() * 3) | 0]); }
@@ -64,7 +74,9 @@ export function createDemoEngine(emit) {
     const id = `F0E1-${(++seq).toString(36)}`;
     const mode = s.mode;
     s.stats[mode].originated++;
-    s.messages.push({ id, peer: dst, peerName: NAMES.find((n) => n[0] === dst)?.[1] || dst, text, outgoing: true, intent: sos ? "EMERGENCY_SOS" : "ROUTINE", status: "sent", time: Date.now(), rttMs: 0, hops: 0, mode, note: sos ? "113→30 B" : "" });
+    const k = s.known.find((x) => x[0] === dst);
+    s.messages.push({ id, peer: dst, peerName: NAMES.find((n) => n[0] === dst)?.[1] || dst, text, outgoing: true, intent: sos ? "EMERGENCY_SOS" : "ROUTINE", status: "sent", time: Date.now(), rttMs: 0, hops: 0, mode, note: sos ? "113→30 B" : "",
+      fcKind: k ? k[5] : 3, fcMs: k ? k[6] : -1, fcP: k ? k[7] : -1 });
     ev("ORIG", { mode, msg: id });
     const near = s.neighbors.filter((n) => n.present && !n.quarantined);
     const relays = mode === "F" ? near : near.slice(0, sos ? 2 : 1);
@@ -74,6 +86,7 @@ export function createDemoEngine(emit) {
       const m = s.messages.find((x) => x.id === id);
       if (!m || !relays.length) return;
       m.status = "delivered"; m.rttMs = 900 + hops * 700; m.hops = hops;
+      if (m.fcMs > 0) { const fa = s.forecastAccuracy; fa.n++; if (Math.abs(m.rttMs - m.fcMs) <= Math.max(1000, m.fcMs / 2)) fa.good++; fa.medianErrPct = Math.round(Math.abs(m.rttMs - m.fcMs) * 100 / m.fcMs); }
       s.stats[mode].confirmed++; s.stats[mode].rttSum += m.rttMs; s.stats[mode].hopSum += hops;
       ev("RX", { mode, msg: id, peer: relays[0].id, value: "Data" });
       ev("DELACK_RX", { mode, msg: id, value: String(m.rttMs) });

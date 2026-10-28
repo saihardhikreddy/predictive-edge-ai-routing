@@ -388,3 +388,31 @@ body.lit .namecard { animation: nc-out 0.6s var(--ease) forwards; }
 .faq summary::after { content: ""; position: absolute; right: 6px; top: 50%; width: 8px; height: 8px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: translateY(-70%) rotate(45deg); transition: transform 0.25s var(--ease); }
 .faq[open] summary::after { transform: translateY(-30%) rotate(-135deg); }
 .faq p { margin: 0 0 14px; font-size: 14px; }
+
+/* ─── survivor census ─── */
+.census { margin: 16px 0 4px; padding: 14px 16px 12px; border-radius: 18px; border: 1px solid var(--edge-2); background: rgba(7, 10, 16, 0.45); }
+.census-line { margin: 0; font-size: 15px; color: var(--text-2); }
+.census-line b { font: 650 22px/1 var(--display); font-stretch: 84%; color: var(--text); font-variant-numeric: tabular-nums; }
+.census-dots { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.census-dots i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(94, 230, 200, 0.55); }
+.census-dots i.you { background: var(--lantern); border-color: var(--lantern); box-shadow: 0 0 10px var(--lantern); }
+.census-dots i.near { background: var(--route); border-color: var(--route); }
+.census-dots i.more { width: auto; height: 12px; border: 0; font: 600 11px/12px var(--sans); color: var(--muted); font-style: normal; }
+.census-sos { margin-top: 2px; }
+.census-sos b { color: var(--lantern); }
+.census-sos .wait { color: var(--hazard); font-weight: 600; }
+.census-note { margin: 10px 0 0; font-size: 12px; color: var(--muted); max-width: 52ch; }
+
+/* ─── delivery forecast ─── */
+.forecast { margin: 4px 0 12px; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(94, 230, 200, 0.28); background: rgba(94, 230, 200, 0.05); }
+.forecast.carry { border-color: rgba(255, 181, 71, 0.35); background: rgba(255, 181, 71, 0.05); }
+.forecast.none { border-color: var(--edge-2); background: none; }
+.fc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.fc-head b { font: 650 18px/1.15 var(--display); font-stretch: 86%; }
+.fc-head span { font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fc-meter { height: 4px; margin: 8px 0 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+.fc-meter i { display: block; height: 100%; width: 0; background: var(--route); border-radius: 4px; transition: width 0.5s var(--ease); }
+.forecast.carry .fc-meter i { background: var(--lantern); }
+.forecast p { margin: 0; font-size: 13px; color: var(--muted); max-width: 56ch; }
+.msg .fc { display: block; font-size: 11px; color: var(--muted); }
+.msg .fc.held { color: var(--route); }

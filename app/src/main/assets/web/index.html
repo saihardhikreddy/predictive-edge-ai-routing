@@ -42,6 +42,12 @@
       <div class="panel" data-panel="mesh">
         <h1 class="display">When the towers go dark, the phones carry the message.</h1>
         <p class="lede" id="mesh-lede">Every phone running this app relays for the others over Bluetooth. Start it on two or more phones to see them here.</p>
+        <div class="census" id="census" hidden>
+          <p class="census-line" id="census-people"></p>
+          <div class="census-dots" id="census-dots" aria-hidden="true"></div>
+          <p class="census-line census-sos" id="census-sos"></p>
+          <p class="census-note">Counted by passing a 32-byte summary from phone to phone. No list of phones is ever shared, and meeting the same phone twice never counts it twice.</p>
+        </div>
         <div class="inspector" id="inspector" hidden></div>
         <h2 class="h2">Phones nearby</h2>
         <ul class="list" id="neighbors"></ul>
@@ -57,6 +63,11 @@
           <p class="group-label" id="dest-far-label">Through the mesh</p>
           <div class="chips chips-far" id="dest-far"></div>
           <p class="hint" id="dest-empty"></p>
+        </div>
+        <div class="forecast" id="forecast" hidden>
+          <div class="fc-head"><b id="fc-title"></b><span id="fc-p"></span></div>
+          <div class="fc-meter"><i id="fc-bar"></i></div>
+          <p id="fc-why"></p>
         </div>
         <div class="compose">
           <textarea id="text" rows="2" maxlength="160" placeholder="Write a message"></textarea>
@@ -113,6 +124,7 @@
         <p class="progress" id="exp-progress"></p>
         <table class="results" id="results"></table>
         <p class="hint" id="frames"></p>
+        <p class="hint" id="fc-acc"></p>
         <div class="row-actions">
           <button class="btn" id="save" type="button">Save CSV</button>
           <button class="btn" id="share" type="button">Share CSV</button>
@@ -171,7 +183,7 @@
         <section class="g-sec" id="g-tests">
           <h3 class="g-h">Test plan</h3>
           <p>Run these in order with three to five phones. Tick each one off as it passes; the ticks stay on this phone.</p>
-          <div class="g-progress"><div class="g-progress-bar"><i id="g-bar"></i></div><span id="g-count">0 of 7 done</span><button class="btn-link" type="button" id="g-clear">Clear ticks</button></div>
+          <div class="g-progress"><div class="g-progress-bar"><i id="g-bar"></i></div><span id="g-count">0 of 9 done</span><button class="btn-link" type="button" id="g-clear">Clear ticks</button></div>
           <ol class="tests" id="g-test-list">
             <li class="test" data-test="t1">
               <h4>Same room, one hop</h4>
@@ -215,6 +227,20 @@
               <dt>Pass when</dt><dd>Both rows of the results table are filled. Learned routing should send fewer frames for each delivered message.</dd></dl>
               <label class="tick"><input type="checkbox"><span>Passed</span></label>
             </li>
+            <li class="test" data-test="t8">
+              <h4>Count the whole mesh</h4>
+              <p class="need">The chain of 4 to 5 phones</p>
+              <dl><dt>Do</dt><dd>Open Mesh on the phone at one end of the chain and wait about a minute.</dd>
+              <dt>Pass when</dt><dd>It hears only one phone directly but says the mesh has all of them. Send an SOS from the far end: the SOS count goes up on every phone, and it shows as answered once it arrives.</dd></dl>
+              <label class="tick"><input type="checkbox"><span>Passed</span></label>
+            </li>
+            <li class="test" data-test="t9">
+              <h4>Check the forecast</h4>
+              <p class="need">Any layout, and the store-carry-forward walk</p>
+              <dl><dt>Do</dt><dd>In Send, pick a phone and read the forecast before sending. Do it in the same room, through the chain, and while the relay is away.</dd>
+              <dt>Pass when</dt><dd>Each receipt shows the forecast next to the real time, and Lab reports how many forecasts held. Walk the relay away and back a few times first, so the phone learns how long it usually stays away.</dd></dl>
+              <label class="tick"><input type="checkbox"><span>Passed</span></label>
+            </li>
             <li class="test" data-test="t7">
               <h4>Collect the logs</h4>
               <p class="need">Every phone used in the tests</p>
@@ -234,6 +260,8 @@
             <li><b>Send in the same room.</b> One hop, straight across.</li>
             <li><b>Block the far phone and send again.</b> The light visibly hops through the middle phone, and the receipt says 2 hops.</li>
             <li><b>Route.</b> Show what the phone has learned from each hop, and who it expects to meet next.</li>
+            <li><b>Census.</b> Back on Mesh, point out that the phone counts everyone in the mesh, including phones it cannot hear.</li>
+            <li><b>Forecast.</b> In Send, read the forecast aloud, send, and compare it with the receipt.</li>
             <li><b>Defend.</b> Make one phone the attacker and let the others cut it out.</li>
             <li><b>Lab.</b> Finish on the table comparing learned routing with flooding.</li>
           </ol>
@@ -250,7 +278,7 @@
 
         <section class="g-sec" id="g-auto">
           <h3 class="g-h">Automated tests</h3>
-          <p>Every build is checked before it is published. 24 scenarios run the real routing engine on virtual phones over a simulated Bluetooth radio: same-room delivery, chains of up to four phones, store-carry-forward, names reaching far phones, and an attacker being caught. The finished APK is then installed on an Android emulator, which checks the name screen, a restart, every chapter, and the page for crashes.</p>
+          <p>Every build is checked before it is published. 28 scenarios run the real routing engine on virtual phones over a simulated Bluetooth radio: same-room delivery, chains of up to four phones, store-carry-forward, names reaching far phones, the census counting a whole chain and its SOS calls, forecasts checked against real delivery times, and an attacker being caught. The finished APK is then installed on an Android emulator, which checks the name screen, a restart, every chapter, and the page for crashes.</p>
           <p class="hint">Results for each build are on the project's Actions page on GitHub.</p>
         </section>
       </div>

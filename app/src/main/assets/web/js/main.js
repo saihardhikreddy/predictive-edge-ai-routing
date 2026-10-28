@@ -276,6 +276,35 @@ const signalWord = (rssi) => (rssi >= -60 ? "Strong" : rssi >= -72 ? "Good" : rs
 const rangeLabel = (v) => (v <= -99 ? "Off" : `${signalWord(v)} or better (${v} dBm)`);
 /* one dot per phone on the path: you, each relay, the destination */
 const pips = (hops) => `<span class="pips" aria-hidden="true">${"<i></i>".repeat(Math.min(8, Math.max(1, hops || 1)) + 1)}</span>`;
+/* durations for forecasts: 0.8 s, 12 s, 4 min */
+const dur = (ms) => (ms < 0 ? "unknown" : ms < 10_000 ? `${(ms / 1000).toFixed(1)} s` : ms < 90_000 ? `${Math.round(ms / 1000)} s` : `${Math.round(ms / 60_000)} min`);
+/* known = [id, name, hops, heardAgoS, present, fcKind, fcMs, fcP, fcOutageMs] */
+function renderForecast(k) {
+  const box = $("forecast");
+  if (!k || !S.running || k[5] === undefined) { box.hidden = true; return; }
+  const [, name, hops, , , kind, ms, p, outage] = k;
+  box.hidden = false;
+  box.className = `forecast ${kind === 2 ? "carry" : kind === 3 ? "none" : ""}`;
+  const pct = p >= 0 ? Math.round(p * 100) : null;
+  if (kind === 0) {
+    $("fc-title").textContent = `Confirmed in about ${dur(ms)}`;
+    $("fc-p").textContent = `${pct}% within 30 s`;
+    $("fc-why").textContent = `${name} is in direct range, so it goes straight across. Timing comes from the hops this phone has measured.`;
+  } else if (kind === 1) {
+    $("fc-title").textContent = `Confirmed in about ${dur(ms)}`;
+    $("fc-p").textContent = `${pct}% within 30 s`;
+    $("fc-why").textContent = `${name} is ${hops} hops away, so it passes through ${hops - 1} ${hops - 1 === 1 ? "relay" : "relays"} and the receipt comes back the same way.`;
+  } else if (kind === 2) {
+    $("fc-title").textContent = `No path now, about ${dur(ms)}`;
+    $("fc-p").textContent = `${pct}% within 10 min`;
+    $("fc-why").textContent = `${name} is usually out of reach for about ${dur(outage)} at a time. The message waits on this phone and moves as soon as a path appears.`;
+  } else {
+    $("fc-title").textContent = "No forecast yet";
+    $("fc-p").textContent = "";
+    $("fc-why").textContent = `There is no path to ${name} right now, and this phone has not yet seen how long ${name} tends to stay away. The message will wait and travel when a path appears.`;
+  }
+  $("fc-bar").style.width = `${pct ?? 0}%`;
+}
 const modeName = (m) => (m === "F" ? "flooding" : "learned route");
 
 function render(force) {
@@ -296,6 +325,22 @@ function render(force) {
     : present.length
       ? "Tap a phone to fly to it. Distance on the map is signal strength: closer means a stronger link."
       : "Listening. Open the app on another phone nearby and press Start there too.";
+  // Survivor census
+  const cs = S.census;
+  $("census").hidden = !S.running || !cs;
+  if (cs && S.running) {
+    const n = Math.max(1, cs.phones);
+    const far = Math.max(0, n - 1 - cs.direct);
+    $("census-people").innerHTML = cs.saturated
+      ? `More than <b>1,000</b> phones are in this mesh.`
+      : `About <b>${n}</b> ${n === 1 ? "phone is" : "phones are"} in this mesh. You hear ${cs.direct} directly${far ? `, and ${far} more through the others` : ""}.`;
+    const dots = ['<i class="you"></i>', ...Array(Math.min(cs.direct, 40)).fill('<i class="near"></i>'), ...Array(Math.min(far, 40)).fill("<i></i>")];
+    put("census-dots", dots.join("") + (n > 81 ? `<i class="more">+${n - 81}</i>` : ""));
+    $("census-sos").innerHTML = cs.sos
+      ? `<b>${cs.sos}</b> SOS ${cs.sos === 1 ? "call" : "calls"} raised in the mesh, ${cs.answered} reached someone${cs.unanswered ? `, <span class="wait">${cs.unanswered} still waiting</span>` : ""}.`
+      : "No SOS calls in the mesh.";
+  }
+
   const ns = S.neighbors || [];
   keyed("neighbors", ns.map((n) => {
     const cls = n.quarantined ? "bad" : n.present && !n.blocked ? "" : "away";
@@ -334,14 +379,20 @@ function render(force) {
   $("dest-far-label").hidden = !far.length;
   $("dest-empty").textContent = known.length ? (far.length ? "" : "Phones out of your range show up under Through the mesh once their name reaches you, usually within 30 s.")
     : S.running ? "No phones yet. Names arrive within about 30 s of another phone starting the app." : "Start the mesh to find phones.";
+  renderForecast(known.find((k) => k[0] === dest));
   const msgs = (S.messages || []).slice().reverse();
   keyed("thread", msgs.map((m) => {
     const sos = m.intent === "EMERGENCY_SOS";
     const meta = m.outgoing
       ? (m.status === "delivered" ? `<span class="meta ok">${pips(m.hops)}Delivered in ${m.hops} ${m.hops === 1 ? "hop" : "hops"}, ${(m.rttMs / 1000).toFixed(1)} s round trip</span>` : `<span class="meta">On its way by ${modeName(m.mode)}</span>`)
       : `<span class="meta">${pips(m.hops)}Arrived over ${m.hops} ${m.hops === 1 ? "hop" : "hops"}</span>`;
+    const fc = m.outgoing && m.fcMs > 0
+      ? (m.status === "delivered"
+        ? `<span class="fc ${Math.abs(m.rttMs - m.fcMs) <= Math.max(1000, m.fcMs / 2) ? "held" : ""}">Forecast ${dur(m.fcMs)}, took ${dur(m.rttMs)}</span>`
+        : `<span class="fc">Forecast ${dur(m.fcMs)}</span>`)
+      : "";
     return { key: m.id + (m.outgoing ? ">" : "<"), attrs: { class: `msg ${m.outgoing ? "out" : "in"} ${sos ? "sos" : ""}` },
-      html: `<span class="who">${m.outgoing ? "To" : "From"} ${esc(m.peerName)}${sos ? ", SOS" : ""}${m.note ? `, sent as ${esc(m.note)}` : ""}</span><p>${esc(readable(m.text))}</p>${!m.outgoing && m.text !== readable(m.text) ? `<span class="meta">Received as ${esc(m.text)}</span>` : ""}${meta}` };
+      html: `<span class="who">${m.outgoing ? "To" : "From"} ${esc(m.peerName)}${sos ? ", SOS" : ""}${m.note ? `, sent as ${esc(m.note)}` : ""}</span><p>${esc(readable(m.text))}</p>${!m.outgoing && m.text !== readable(m.text) ? `<span class="meta">Received as ${esc(m.text)}</span>` : ""}${meta}${fc}` };
   }), "");
 
   // Route
@@ -382,6 +433,10 @@ function render(force) {
   };
   put("results", `<tr><th></th><th>Sent</th><th>Arrived</th><th>Round trip</th><th>Hops</th></tr>${row("M", "Learned")}${row("F", "Flooding")}`);
   $("frames").textContent = `This phone sent ${S.txFrames || 0} frames (${S.txFails || 0} failed, ${Math.round((S.txBytes || 0) / 1024)} KB) and is holding ${S.stored || 0} for later. Only your own messages are counted here; merge every phone's CSV for the full picture.`;
+  const fa = S.forecastAccuracy;
+  $("fc-acc").textContent = fa && fa.n
+    ? `Delivery forecasts: ${fa.good} of ${fa.n} held (within ±50 %, or 1 s), median error ${fa.medianErrPct} %.`
+    : "Delivery forecasts are checked against every confirmed message; results show here after the first delivery.";
   put("log", esc((S.logTail || []).join("\n")));
 }
 
