@@ -900,8 +900,8 @@ class MeshSimulationEngine:
         self.log_event("ATTACK_INJECTED", f"Sinkhole {node_id} spawned (lies in beacons + ACKs, drops data).")
         return node_id
 
-    def run_gnn_ids(self):
-        """Ego-graph trust IDS.
+    def run_trust_ids(self):
+        """Ego-graph trust IDS (two-hop ACK evidence + CUSUM; no neural network, no attack label).
 
         Step 1 (message passing): every node's forwarding reputation is the
         decayed Beta mean of 2ACK outcomes reported by everyone who handed it a
@@ -1019,7 +1019,7 @@ class MeshSimulationEngine:
         self._resolve_ack_timeouts()
         if self.sim_time - self._last_ids >= self.IDS_INTERVAL_S:
             self._last_ids = self.sim_time
-            self.run_gnn_ids()
+            self.run_trust_ids()
         if self.auto_traffic and self.sim_time - self._last_traffic > self.traffic_interval_s:
             self._last_traffic = self.sim_time
             alive = [k for k, n in self.nodes.items() if n.alive and not n.is_sinkhole]
