@@ -65,7 +65,12 @@ def one_run(job: Dict) -> Dict:
         traffic_interval_s=job["traffic_interval"],
         cold_start=job.get("cold_start", False),
         long_range=job.get("long_range", False),
+        predict_links=job.get("predict_links", False),
+        track_links=job.get("track_links", False),
+        pred_mode=job.get("pred_mode", "hop"),
     )
+    if job.get("mobility"):
+        e.mobility_scale = job["mobility"]
     e.protocol_mode = mode
     dt = 0.1
     attack_at = job.get("attack_at")
@@ -118,6 +123,12 @@ def one_run(job: Dict) -> Dict:
         curve.append((mm["delivered"] - wd) / max(1, mm["generated"] - wg))
         for i, c in enumerate(curve):
             row[f"pdr_w{i:02d}"] = c
+    if e.track_links:
+        from simulation.link_predictor import metrics
+        pooled = {m: [pr for lp in e.link_pred.values() for pr in lp.scored[m]] for m in ("trend", "rssi", "always", "base_rate")}
+        row["link_pred"] = {m: metrics(v) for m, v in pooled.items()}
+        row["link_pairs"] = pooled["trend"]
+    row["link_breaks"] = e.m["marl"]["link_breaks"]
     if attacked:
         g = p["generated"] - gen_before
         d = p["delivered"] - deliv_before

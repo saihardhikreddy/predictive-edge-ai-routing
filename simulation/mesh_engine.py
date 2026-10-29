@@ -41,6 +41,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from . import triage
+from .link_predictor import LinkPredictor
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -156,6 +157,8 @@ class MeshSimulationEngine:
     BOUNDS_WIDTH = 900.0
     BOUNDS_HEIGHT = 550.0
     HOP_TIME_S = 0.4
+    LINK_HORIZON_S = 3.0   # link-survival prediction horizon (see link_predictor.py)
+    HANDOFF_MARGIN = 1.0   # "handoff" mode: how close to CARRY a leaving neighbour must score
     DECISION_INTERVAL_S = 0.5
     # rewards
     REWARD_DELIVER = 10.0
@@ -212,10 +215,22 @@ class MeshSimulationEngine:
         mobility_scale: float = 1.0,
         cold_start: bool = False,
         long_range: bool = False,
+        predict_links: bool = False,
+        track_links: bool = False,
+        pred_mode: str = "hop",
     ):
         self.mobility_scale = mobility_scale
         self.cold_start = cold_start
         self.long_range = long_range
+        # link-survival prediction: learned per node from beacon RSSI (see link_predictor.py).
+        # predict_links: the router uses it; track_links: only learn and score it (for evaluation)
+        self.predict_links = predict_links
+        # how the router uses it: "horizon" discounts link value by 3-s survival, "hop" by survival
+        # over one hop time, "handoff" keeps values but hands a carried message to a useful
+        # neighbour that is about to leave
+        self.pred_mode = pred_mode
+        self.track_links = track_links or predict_links
+        self.link_pred: Dict[str, LinkPredictor] = {}
         self.coded = set()  # frozenset({a, b}) for links that exist only over Long Range
         self.seed = seed if seed is not None else random.randrange(1 << 30)
         self.mob_rng = random.Random(self.seed)
@@ -482,7 +497,23 @@ class MeshSimulationEngine:
         if y_id is None:
             return v
         lq = phi[2]
+        if self.predict_links and self.pred_mode in ("horizon", "hop"):
+            # the frame only helps if the link lasts: discount by predicted survival, either over
+            # the whole horizon or scaled to one hop time (constant hazard: p^(t_hop/H))
+            p = self.link_survival(x.id, y_id)
+            lq *= p if self.pred_mode == "horizon" else p ** (self.HOP_TIME_S / self.LINK_HORIZON_S)
         return lq * v + (1.0 - lq) * self.PENALTY_LINK_BREAK
+
+    def link_survival(self, x_id: str, y_id: str) -> float:
+        lp = self.link_pred.get(x_id)
+        return 1.0 if lp is None else lp.predict(y_id, self.sim_time)
+
+    def _observe_links(self):
+        for nid, n in self.nodes.items():
+            if not n.alive:
+                continue
+            lp = self.link_pred.setdefault(nid, LinkPredictor())
+            lp.observe(self.sim_time, dict(self.adj.get(nid, {})))
 
     @staticmethod
     def _dot(w: List[float], phi: List[float]) -> float:
@@ -636,6 +667,16 @@ class MeshSimulationEngine:
         else:
             idx = max(range(len(actions)), key=lambda i: qs[i])
         choice = actions[idx][0]
+        if choice is None and self.predict_links and self.pred_mode == "handoff" and len(actions) > 1:
+            # last-chance handoff: a useful neighbour is about to leave, so hand it over now
+            carry_q = qs[0]
+            for i in range(1, len(actions)):
+                a = actions[i][0]
+                if self.link_survival(x.id, a) < 0.5 and qs[i] > carry_q - self.HANDOFF_MARGIN:
+                    if choice is None or qs[i] > qs[idx]:
+                        choice, idx = a, i
+            if choice is not None:
+                self.m["marl"]["handoffs"] = self.m["marl"].get("handoffs", 0) + 1
         best_now = max(qs)
         # close the previous CARRY decision: r = -c, s' = now
         if pkt.carry_phi is not None:
@@ -1005,6 +1046,8 @@ class MeshSimulationEngine:
         self._age_predictability(dt)
         if self.sim_time - self._last_beacon >= self.BEACON_INTERVAL_S:
             self._last_beacon = self.sim_time
+            if self.track_links:
+                self._observe_links()
             if self.protocol_mode in ("MARL", "COMPARISON"):
                 full = self.sim_time - self._last_pvec >= self.PVEC_REFRESH_S
                 if full:
