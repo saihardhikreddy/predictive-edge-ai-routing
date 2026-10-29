@@ -76,6 +76,57 @@ lesson: range and routing must be designed together; more range only pays off wi
 On virtual phones: two phones 16 m apart cannot talk on normal BLE but deliver in 1 hop over Long Range; a mesh
 split into three islands joins; a 5-phone chain drops below 4 hops; older phones keep working on 1M PHY.
 
+## 3d. Response to the source-code audit (October 2026)
+
+An external audit reviewed an early copy of the repository. Where it stands now:
+
+| Audit finding (early copy) | Status now | Evidence |
+|---|---|---|
+| TD target fixed at 7.5; only the first hop updated | Fixed: per-hop TD(0) on the next hop's advertised value | `simulation/mesh_engine.py` `_complete_hop`, `MarlRouter.onHopAcked` |
+| "GNN" IDS uses the attack label and 0.985 | Fixed: two-hop ACK + ego-graph CUSUM, no label; renamed `run_trust_ids` | 12/12 detected, 0 false positives in 30 runs |
+| 41.8 ms detection latency was a constant | Removed; detection measured | 44 ± 11 s |
+| No gossip federated learning | Implemented in simulator and app | cold start: 0.72 vs 0.56 delivery at 2 min |
+| SOS was a flag; 140→18 B assigned | Lexicon classifier + encoder/decoder | SOS 113 → 30 B measured |
+| No seeds, single runs, unfair flooding costs | Fixed seeds, 6 seeds x 300 s, identical traces and energy model | `benchmark.py`, `results/runs.csv` |
+| Kotlin class is not real Bluetooth | Full Android app (BLE adverts, GATT, Long Range) | 38 virtual-phone tests + emulator in CI |
+| **No link-availability prediction** | **Implemented and measured** (section 3e) | `results/link_prediction.md` |
+| **No standard DTN baselines** | **Implemented and measured** (section 3f) | `results/dtn_baselines.md` |
+| No real-phone measurements | Still open: field test with 3–5 phones; the app logs every link prediction for it | `FIELD_TEST.md` |
+
+## 3e. Link-survival prediction
+
+Each node learns, online and on its own, the chance that a neighbour is still heard for the next 3 s, by logistic
+regression on beacon RSSI, its 5-second slope and link age (`simulation/link_predictor.py`, `LinkPredictor.kt`).
+Scoring is test-then-train after a 60 s warm-up, so no prediction sees its own future.
+
+- **It predicts well once links actually break:** AUC 0.85 / 0.83 at x4 / x8 mobility (RSSI only: 0.75 / 0.70;
+  baselines 0.50), with the best Brier score of all models. The trend feature is what adds the skill.
+- **At walking pace (x1) there is almost nothing to predict:** 2 % of links break and every model is near chance.
+- **Calibration is over-pessimistic at low probabilities** (few samples there); the bulk (p ≈ 0.93) is well calibrated.
+- **It does not improve routing in this simulator.** Discounting link value by predicted survival cuts link failures
+  by 16–23 % at x8 but never raises delivery beyond seed noise, and slows delivery. A hop takes 0.4 s while links
+  last tens of seconds, most failures are frame losses already captured by RSSI, and in a delay-tolerant mesh a
+  neighbour that is walking away is often a useful carrier. An accurate predictor is not automatically a better
+  routing policy; we report this as a negative result. The app therefore shows the prediction and logs it for field
+  validation, but does not steer routing with it.
+
+## 3f. Standard DTN baselines
+
+`simulation/dtn_baselines.py` adds Epidemic, binary Spray-and-Wait (L = 8), PRoPHET (GRTR) and Direct delivery on
+the same mobility, radio, traffic and energy model (PRoPHET pays for its vectors, all pay for delivery receipts;
+copies live until TTL, plus an optimistic "instant purge" variant). Results (`results/dtn_baselines.md`, 6 seeds):
+
+- **Spray-and-Wait beats our learned routing at every size**: delivery 0.93–0.96 vs 0.89–0.92, and 2–4x less energy.
+- **Epidemic and PRoPHET deliver ≈ 1.00 and faster**; at 32 and 48 nodes learned routing uses less energy than both.
+- Multi-copy schemes also shrug off the sinkhole through redundancy (PDR 0.95–1.00 after the attack vs our 0.85).
+
+So the honest positioning is: our learned single-copy router is far cheaper than flooding and cheaper than
+Epidemic/PRoPHET in dense meshes, but a well-tuned Spray-and-Wait is a stronger baseline than flooding, and our
+router does not beat it here. The contributions that remain distinctive are the infrastructure-free learning
+(gossip FedAvg), the label-free trust layer for single-copy routing, the survivor census, the delivery forecast,
+and Long Range-aware routing on real phones. Next step: learn *how many copies* to spray (a learned copy budget),
+which would combine Spray-and-Wait's delivery with the learned router's relay choice.
+
 ## 4. What the results honestly say (put this on a slide; examiners respect it)
 
 1. **The energy and collision win is real and grows with density.** Flooding's cost grows with neighbourhood size; unicast routing's doesn't.
