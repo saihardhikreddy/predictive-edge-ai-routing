@@ -285,8 +285,9 @@ class MeshSimulationEngine:
                 "link_breaks": 0, "sinkhole_drops": 0,
                 "sos_generated": 0, "sos_delivered": 0, "sos_latencies": [],
             }
-            for proto in ("marl", "flood")
+            for proto in ("marl", "flood", "dtn")
         }
+        self.dtn = None  # set to a DTNRouter to run a standard DTN baseline (see dtn_baselines.py)
         self.triage_stats = {"raw_bytes": 0, "air_bytes": 0, "n": 0, "sos_raw": 0, "sos_air": 0, "sos_n": 0}
 
     def _init_nodes(self, count: int):
@@ -558,7 +559,7 @@ class MeshSimulationEngine:
         self.m["marl"]["control_bytes"] += nbytes
         self.m["marl"]["energy"] += e
 
-    def _beacons(self, full_vector: bool):
+    def _beacons(self, full_vector: bool, proto: str = "marl", base_bytes: int = 2):
         """BitChat already broadcasts a periodic announce for peer discovery, so
         MARL adds no extra transmissions here -- only extension bytes, which are
         charged to MARL: 2 B (battery, buffer) every second and the top-8
@@ -566,12 +567,14 @@ class MeshSimulationEngine:
         for n in self.nodes.values():
             if not n.alive:
                 continue
-            nbytes = 2 + (3 * min(8, len(n.P)) if full_vector else 0)
+            nbytes = base_bytes + (3 * min(8, len(n.P)) if full_vector else 0)
+            if nbytes == 0:
+                continue
             e = self._charge(n, nbytes, True)
             for y in self.adj.get(n.id, {}):
                 e += self._charge(self.nodes[y], nbytes, False)
-            self.m["marl"]["control_bytes"] += nbytes
-            self.m["marl"]["energy"] += e
+            self.m[proto]["control_bytes"] += nbytes
+            self.m[proto]["energy"] += e
 
     # ------------------------------------------------------------- messaging
 
@@ -598,6 +601,8 @@ class MeshSimulationEngine:
             self.execute_marl_dispatch(source_id, dest_id, tri, msg_id)
         if self.protocol_mode in ("FLOODING", "COMPARISON"):
             self.execute_flooding_dispatch(source_id, dest_id, tri, msg_id, is_comparison=self.protocol_mode == "COMPARISON")
+        if self.dtn is not None and self.protocol_mode == self.dtn.kind:
+            self.dtn.originate(source_id, dest_id, tri, msg_id)
         return msg_id
 
     # ---------------------------------------------------------------- MARL
@@ -1053,12 +1058,20 @@ class MeshSimulationEngine:
                 if full:
                     self._last_pvec = self.sim_time
                 self._beacons(full)
+            elif self.protocol_mode == "PROPHET":
+                # PRoPHET exchanges the same delivery-predictability vectors, so it pays for them too
+                full = self.sim_time - self._last_pvec >= self.PVEC_REFRESH_S
+                if full:
+                    self._last_pvec = self.sim_time
+                    self._beacons(True, proto="dtn", base_bytes=0)
         for when, job in list(self.scheduled):
             if self.sim_time >= when:
                 self.scheduled.remove((when, job))
                 self.trigger_message(job["src"], job["dst"], is_emergency=job.get("sos", False))
         self._update_marl_packets(dt)
         self._update_flood_branches(dt)
+        if self.dtn is not None and self.protocol_mode == self.dtn.kind:
+            self.dtn.step()
         self._resolve_ack_timeouts()
         if self.sim_time - self._last_ids >= self.IDS_INTERVAL_S:
             self._last_ids = self.sim_time

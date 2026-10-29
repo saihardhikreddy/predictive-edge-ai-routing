@@ -26,6 +26,7 @@ from concurrent.futures import ProcessPoolExecutor
 from typing import Dict, List
 
 from simulation.mesh_engine import MeshSimulationEngine
+from simulation.dtn_baselines import KINDS as DTN_KINDS, DTNRouter
 
 VARIANTS = {
     # name: (protocol_mode, learning, federated, ids)
@@ -35,6 +36,11 @@ VARIANTS = {
     "MARL w/o federated gossip": ("MARL", True, False, True),
 }
 ORDER = list(VARIANTS)
+# standard DTN baselines (run by tools/dtn_baselines_benchmark.py; not part of the main tables)
+VARIANTS["Epidemic"] = ("EPIDEMIC", False, False, False)
+VARIANTS["Spray-and-Wait (L=8)"] = ("SPRAY", False, False, False)
+VARIANTS["PRoPHET (GRTR)"] = ("PROPHET", False, False, False)
+VARIANTS["Direct delivery"] = ("DIRECT", False, False, False)
 VARIANTS["MARL (no IDS)"] = ("MARL", True, True, False)  # attack experiment only
 COLD_VARIANTS = ["Cold start, no learning", "Cold start + TD learning", "Cold start + TD + gossip FL"]
 VARIANTS["Cold start, no learning"] = ("MARL", False, False, True)
@@ -72,6 +78,8 @@ def one_run(job: Dict) -> Dict:
     if job.get("mobility"):
         e.mobility_scale = job["mobility"]
     e.protocol_mode = mode
+    if mode in DTN_KINDS:
+        e.dtn = DTNRouter(e, mode, vaccine=job.get("vaccine", False))
     dt = 0.1
     attack_at = job.get("attack_at")
     attacked = False
@@ -85,13 +93,13 @@ def one_run(job: Dict) -> Dict:
             curve.append((mm["delivered"] - wd) / max(1, mm["generated"] - wg))
             wg, wd = mm["generated"], mm["delivered"]
         if attack_at is not None and not attacked and e.sim_time >= attack_at:
-            proto = "marl" if mode == "MARL" else "flood"
+            proto = "marl" if mode == "MARL" else "dtn" if mode in DTN_KINDS else "flood"
             gen_before, deliv_before = e.m[proto]["generated"], e.m[proto]["delivered"]
             e.inject_sinkhole()
             attacked = True
         e.tick(dt)
     s = e.summary()
-    p = s["marl"] if mode == "MARL" else s["flood"]
+    p = s["marl"] if mode == "MARL" else s["dtn"] if mode in DTN_KINDS else s["flood"]
     row = {
         "experiment": job["experiment"],
         "variant": job["variant"],
@@ -127,7 +135,7 @@ def one_run(job: Dict) -> Dict:
         from simulation.link_predictor import metrics
         pooled = {m: [pr for lp in e.link_pred.values() for pr in lp.scored[m]] for m in ("trend", "rssi", "always", "base_rate")}
         row["link_pred"] = {m: metrics(v) for m, v in pooled.items()}
-        row["link_pairs"] = pooled["trend"]
+        row["link_pred_pairs"] = pooled
     row["link_breaks"] = e.m["marl"]["link_breaks"]
     if attacked:
         g = p["generated"] - gen_before
