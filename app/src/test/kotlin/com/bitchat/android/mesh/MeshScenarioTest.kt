@@ -395,6 +395,29 @@ class MeshScenarioTest {
         assertFalse(st("A").neighbors.first { it.id == id("B") }.longRange)
     }
 
+    // ------------------------------------------------------- link prediction
+
+    @Test
+    fun linkPrediction_flagsTheNeighbourWhoIsWalkingAway() {
+        // B stays put next to A; C keeps walking out of range and back at 1 m/s
+        phone("A", 0.0); phone("B", 4.0); phone("C", 4.0)
+        run(10.0)
+        repeat(8) {
+            // walk away to 25 m: out of range past 12 m, and dropped once 12 s pass without an advert
+            for (d in 4..25) { move("C", d.toDouble()); run(1.0) }
+            for (d in 25 downTo 4) { move("C", d.toDouble()); run(1.0) } // and back
+        }
+        for (d in 4..9) { move("C", d.toDouble()); run(1.0) }       // walking away again, still in range
+        val last = st("A")
+        val b = last.neighbors.first { it.id == id("B") }
+        val c = last.neighbors.first { it.id == id("C") }
+        println("link prediction scenario: B (standing) stays ${(b.stay * 100).toInt()} %, C (walking away, ${"%.1f".format(c.trendDbPerS)} dB/s) stays ${(c.stay * 100).toInt()} %; " +
+            "checked ${last.linkScore.n} predictions, ${last.linkScore.caught}/${last.linkScore.breaks} breaks flagged, Brier ${"%.3f".format(last.linkScore.brier)}")
+        assertTrue("C is getting weaker", c.trendDbPerS < -0.5)
+        assertTrue("walking-away neighbour must look less likely to stay: B=${b.stay} C=${c.stay}", c.stay < b.stay)
+        assertTrue(last.linkScore.breaks > 0)
+    }
+
     // ------------------------------------------------------- attack
 
     @Test
