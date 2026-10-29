@@ -24,6 +24,7 @@ fun UiState.toJson(): String {
                 put("present", n.present); put("seenAgoS", n.seenAgoS); put("linkQ", n.linkQ)
                 put("reputation", n.reputation); put("anomaly", n.anomaly)
                 put("quarantined", n.quarantined); put("blocked", n.blocked); put("longRange", n.longRange)
+                put("stay", n.stay); put("trend", n.trendDbPerS)
             })
         }
     })
@@ -39,6 +40,9 @@ fun UiState.toJson(): String {
     o.put("census", JSONObject().apply {
         put("phones", census.phones); put("sos", census.sos); put("answered", census.answered)
         put("unanswered", census.unanswered); put("saturated", census.saturated); put("direct", census.direct)
+    })
+    o.put("linkScore", JSONObject().apply {
+        put("n", linkScore.n); put("breaks", linkScore.breaks); put("caught", linkScore.caught); put("brier", linkScore.brier)
     })
     o.put("forecastAccuracy", JSONObject().apply {
         put("n", forecastAccuracy.n); put("good", forecastAccuracy.good); put("medianErrPct", forecastAccuracy.medianErrPct)

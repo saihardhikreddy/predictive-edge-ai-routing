@@ -146,6 +146,10 @@ class MeshEngine(
     private var lastCensusLog = ""
     private val sosReceived = HashSet<String>()
     private val forecast = Forecast()
+    /** Will each neighbour still be in range in 3 s? Learned on this phone from advert RSSI. */
+    private val linkPred = LinkPredictor()
+    private var lastLinkSample = 0L
+    private var lastLinkLog = 0L
 
     private val stats = HashMap<String, ModeStats>().apply {
         put(Protocol.MODE_MARL, ModeStats())
@@ -279,6 +283,7 @@ class MeshEngine(
             processExperiment(t)
             processCensus(t)
             observeReach(t)
+            if (t - lastLinkSample >= 1_000) sampleLinks(t)
             if (t - lastAdvert > 10_000) refreshAdvert(t)
             if (t - lastAnnounce > 30_000) announce(t)
             publish()
@@ -788,6 +793,21 @@ class MeshEngine(
         }
     }
 
+    // ------------------------------------------------------------ link prediction
+
+    private fun sampleLinks(t: Long) {
+        lastLinkSample = t
+        val heard = neighbors.values.filter { inRange(it, t) }.associate { it.id to effRssi(it, t).toDouble() }
+        for ((p, y) in linkPred.observe(t, heard)) {
+            if (y == 0) log.write("LINK_BREAK", value = "predicted_survival=${String.format(Locale.US, "%.2f", p)}")
+        }
+        if (t - lastLinkLog >= 30_000) {
+            lastLinkLog = t
+            val s = linkPred.score()
+            if (s.n > 0) log.write("LINK_PRED", value = "n=${s.n};breaks=${s.breaks};caught=${s.caught};brier=${String.format(Locale.US, "%.4f", s.brier)}")
+        }
+    }
+
     private fun now() = clock()
 
     private fun battery(): Int = batteryLevel?.invoke() ?: try {
@@ -814,6 +834,8 @@ class MeshEngine(
                     present = inRange(it, t), seenAgoS = ((t - it.lastSeen) / 1000).toInt(),
                     linkQ = MarlRouter.packetSuccessProb(effRssi(it, t)),
                     longRange = it.longRange(t),
+                    stay = linkPred.predict(it.id, t),
+                    trendDbPerS = linkPred.trend(it.id),
                     reputation = router.reputation(it.id), anomaly = router.anomalyScore(it.id),
                     quarantined = it.id in router.quarantined, blocked = it.id in blocked,
                 )
@@ -823,6 +845,7 @@ class MeshEngine(
                 UiCensus(c.phones, c.sos, c.answered, c.saturated, neighbors.values.count { inRange(it, t) })
             },
             forecastAccuracy = forecast.accuracy(),
+            linkScore = linkPred.score(),
             known = (known.keys + routes.keys).filter { it != myId }.distinct().map { id ->
                 val nb = neighbors[id]
                 val present = nb != null && inRange(nb, t)
@@ -904,6 +927,10 @@ data class UiNeighbor(
     val blocked: Boolean,
     /** Reached over Bluetooth 5 Long Range (LE Coded PHY). */
     val longRange: Boolean = false,
+    /** Predicted chance the link lasts the next 3 s (see LinkPredictor). */
+    val stay: Double = 1.0,
+    /** RSSI trend in dB/s: negative = getting weaker. */
+    val trendDbPerS: Double = 0.0,
 )
 
 data class UiState(
@@ -922,6 +949,7 @@ data class UiState(
     val nickSet: Boolean = false,
     val census: UiCensus = UiCensus(),
     val forecastAccuracy: Forecast.Accuracy = Forecast.Accuracy(0, 0, 0),
+    val linkScore: LinkPredictor.Score = LinkPredictor.Score(0, 0, 0.0, 0),
     val known: List<KnownPhone> = emptyList(),
     val messages: List<ChatMsg> = emptyList(),
     val stats: Map<String, ModeStats> = emptyMap(),
