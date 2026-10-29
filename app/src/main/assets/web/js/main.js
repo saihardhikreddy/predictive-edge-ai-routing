@@ -358,7 +358,8 @@ function render(force) {
   if (sel) {
     put("inspector", `<h3>${esc(sel.nick || sel.id)}</h3><p class="hint">${sel.present ? "In direct reach" : "Out of direct reach"}${sel.quarantined ? ", cut out of routes" : ""}</p>
       <dl class="facts"><div><dt>Signal</dt><dd>${signalWord(sel.rssi)}, ${sel.rssi} dBm</dd></div><div><dt>Link quality</dt><dd>${pct(sel.linkQ)}</dd></div><div><dt>Battery</dt><dd>${sel.battery}%</dd></div>
-      <div><dt>Reputation</dt><dd>${pct(sel.reputation)}</dd></div><div><dt>Suspicion</dt><dd>${pct(sel.anomaly)}</dd></div><div><dt>Id</dt><dd>${esc(sel.id.slice(0, 4))}</dd></div></dl>
+      <div><dt>Reputation</dt><dd>${pct(sel.reputation)}</dd></div><div><dt>Suspicion</dt><dd>${pct(sel.anomaly)}</dd></div><div><dt>Stays in reach (3 s)</dt><dd>${sel.present ? pct(sel.stay ?? 1) : "–"}</dd></div>
+      <div><dt>Signal trend</dt><dd>${!sel.present ? "–" : (sel.trend ?? 0) < -0.8 ? "Walking away" : (sel.trend ?? 0) > 0.8 ? "Coming closer" : "Steady"}</dd></div></dl>
       <div class="row-actions"><button class="btn" type="button" data-block="${esc(sel.id)}">${sel.blocked ? "Unblock" : "Block this phone"}</button><button class="btn" type="button" data-message="${esc(sel.id)}">Message</button></div>`);
   }
 
@@ -439,6 +440,10 @@ function render(force) {
   };
   put("results", `<tr><th></th><th>Sent</th><th>Arrived</th><th>Round trip</th><th>Hops</th></tr>${row("M", "Learned")}${row("F", "Flooding")}`);
   $("frames").textContent = `This phone sent ${S.txFrames || 0} frames (${S.txFails || 0} failed, ${Math.round((S.txBytes || 0) / 1024)} KB) and is holding ${S.stored || 0} for later. Only your own messages are counted here; merge every phone's CSV for the full picture.`;
+  const ls = S.linkScore;
+  $("link-acc").textContent = ls && ls.n
+    ? `Link prediction on this phone: ${ls.n} predictions checked, ${ls.caught} of ${ls.breaks} link breaks flagged in advance, Brier score ${ls.brier.toFixed(3)} (lower is better).`
+    : "Link prediction is checked against real link breaks after the first minute.";
   const fa = S.forecastAccuracy;
   $("fc-acc").textContent = fa && fa.n
     ? `Delivery forecasts: ${fa.good} of ${fa.n} held (within ±50 %, or 1 s), median error ${fa.medianErrPct} %.`

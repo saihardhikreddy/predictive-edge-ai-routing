@@ -18,6 +18,7 @@ export function createDemoEngine(emit) {
     expRemaining: 0, expTotal: 0, logTail: [], events: [],
     census: { phones: 1, sos: 0, answered: 0, unanswered: 0, saturated: false, direct: 0 },
     forecastAccuracy: { n: 0, good: 0, medianErrPct: 0 },
+    linkScore: { n: 412, breaks: 9, caught: 6, brier: 0.031 },
   };
   const phones = NAMES.slice(0, 4).map(([id, nick], i) => ({ id, nick, base: -58 - i * 9, phase: i * 1.7 }));
   let exp = null;
@@ -43,6 +44,8 @@ export function createDemoEngine(emit) {
           reputation: n?.reputation ?? 0.5, anomaly: n?.anomaly ?? 0, quarantined: n?.quarantined ?? false,
           blocked: (s.blocked || []).includes(p.id),
           longRange: p.id === "D9A0B4C7",
+          stay: Math.min(0.99, Math.max(0.05, 1 / (1 + Math.exp(-(rssi + 84) / 3)))),
+          trend: Math.cos(t * 0.3 + p.phase) * 1.8,
         };
       });
       // [id, name, hops, heardAgoS, present]: the first four are in range, Canteen is 3 hops away
