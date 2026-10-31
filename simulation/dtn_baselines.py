@@ -20,7 +20,7 @@ vanishes the moment the message is delivered: an optimistic upper bound for the 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict
 
 KINDS = ("EPIDEMIC", "SPRAY", "PROPHET", "DIRECT")
 CONTROL_BYTES = 8

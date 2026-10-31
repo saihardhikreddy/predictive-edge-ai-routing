@@ -1,5 +1,4 @@
 import unittest
-import asyncio
 import json
 from digital_twin_server import DigitalTwinServer
 
