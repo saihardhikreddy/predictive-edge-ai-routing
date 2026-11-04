@@ -50,6 +50,10 @@ TOKEN_NAMES = {v: k for k, v in TOKEN_IDS.items()}
 INTENT_CODES = {INTENT_ROUTINE: 0, INTENT_URGENT: 1, INTENT_SOS: 2}
 INTENT_FROM_CODE = {v: k for k, v in INTENT_CODES.items()}
 
+# Header byte flags: 0x80 = semantic SOS encoding, 0x40 = uncompressed text follows.
+# (0xFF, both set, means the SLM was disabled and the raw text follows.)
+RAW_FLAG = 0x40
+
 SOS_THRESHOLD = 3.0
 URGENT_THRESHOLD = 1.0
 
@@ -150,7 +154,10 @@ def encode(text: str, slm_enabled: bool = True) -> TriageResult:
         blob = bytes([0x80 | INTENT_CODES[intent], len(tok_ids)] + tok_ids + [people])
     else:
         z = _zlib(text)
-        blob = bytes([INTENT_CODES[intent]]) + (z if len(z) < len(raw) else raw)
+        if len(z) < len(raw):
+            blob = bytes([INTENT_CODES[intent]]) + z
+        else:  # too short to compress: send as-is, flagged so decode doesn't inflate it
+            blob = bytes([RAW_FLAG | INTENT_CODES[intent]]) + raw
     return TriageResult(intent, URGENCY[intent], score, tokens, people, len(raw), blob)
 
 
@@ -170,6 +177,8 @@ def decode(blob: bytes) -> str:
             s += f" | people={people}"
         return s
     body = blob[1:]
+    if head & RAW_FLAG:
+        return body.decode("utf-8")
     try:
         return _unzlib(body)
     except zlib.error:

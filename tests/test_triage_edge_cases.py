@@ -12,6 +12,11 @@ class TriageEdgeCaseTests(unittest.TestCase):
         "नमस्ते, see you at 5 🙂",
         "x" * 500,
         "line one\nline two\ttabbed",
+        # too short for zlib to shrink, so they go on air uncompressed
+        "hi",
+        "ok",
+        "Z",
+        "🙂",
     ]
 
     def test_routine_roundtrip(self):
