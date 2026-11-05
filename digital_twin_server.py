@@ -93,7 +93,14 @@ class DigitalTwinServer:
                 self.engine.log_event("CONTROL", "Manual Step Frame")
 
             elif action == "set_protocol_mode":
-                mode = data.get("mode", "MARL")
+                mode = str(data.get("mode", "MARL")).upper()
+                allowed = {"MARL", "FLOODING", "COMPARISON"}
+                if self.engine.dtn is not None:
+                    allowed.add(self.engine.dtn.kind)  # a DTN baseline runs under its own mode name
+                if mode not in allowed:
+                    # An unknown mode would silently stop every dispatch: no router matches it.
+                    print(f"[ACTION_WARN] Unknown protocol mode: {mode}")
+                    return
                 self.engine.protocol_mode = mode
                 if mode == "FLOODING":
                     self.engine.set_narrative(

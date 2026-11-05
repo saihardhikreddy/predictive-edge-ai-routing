@@ -25,6 +25,13 @@ class ServerRobustnessTests(unittest.IsolatedAsyncioTestCase):
         await self._send({"action": "self_destruct"})
         self.assertEqual(self.server.engine.protocol_mode, mode)
 
+    async def test_unknown_protocol_mode_is_rejected(self):
+        await self._send({"action": "set_protocol_mode", "mode": "FLOODING"})
+        await self._send({"action": "set_protocol_mode", "mode": "TELEPATHY"})
+        self.assertEqual(self.server.engine.protocol_mode, "FLOODING")
+        await self._send({"action": "set_protocol_mode", "mode": "marl"})
+        self.assertEqual(self.server.engine.protocol_mode, "MARL")
+
     async def test_speed_is_clamped(self):
         await self._send({"action": "set_speed", "speed": 100})
         self.assertEqual(self.server.engine.simulation_speed, 8.0)
