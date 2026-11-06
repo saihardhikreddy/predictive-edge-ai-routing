@@ -271,7 +271,7 @@ class MeshSimulationEngine:
         self._last_pvec = 0.0
         self._last_ids = 0.0
         self._last_traffic = 0.0
-        self.sinkhole_injection_time: Optional[float] = None
+        self.sinkhole_injected_at: Dict[str, float] = {}  # node -> sim time it turned sinkhole
         self.ids_detection_s: List[float] = []
         self.trust_events: List[Tuple[str, bool]] = []
         self.cusum: Dict[str, float] = {}
@@ -933,6 +933,8 @@ class MeshSimulationEngine:
         cands = [n for n in self.nodes if not self.nodes[n].is_sinkhole]
         if not cands:
             return
+        if node_id in self.nodes and self.nodes[node_id].is_sinkhole:
+            return node_id  # already attacking: re-injecting would restart its detection clock
         if node_id not in self.nodes:
             # most central node = most dangerous
             node_id = max(cands, key=lambda n: len(self.adj.get(n, {})))
@@ -940,7 +942,7 @@ class MeshSimulationEngine:
         t.is_sinkhole = True
         t.advertised_q = 9.9
         t.status = "SINKHOLE"
-        self.sinkhole_injection_time = self.sim_time
+        self.sinkhole_injected_at[node_id] = self.sim_time
         self.set_narrative(f"ATTACK: {node_id} now advertises P(d)=1.0 and V=9.9 for every destination and drops all data.")
         self.log_event("ATTACK_INJECTED", f"Sinkhole {node_id} spawned (lies in beacons + ACKs, drops data).")
         return node_id
@@ -988,8 +990,8 @@ class MeshSimulationEngine:
                 for peer in self.nodes.values():
                     peer.prune_peer(nid)
                 det = None
-                if node.is_sinkhole and self.sinkhole_injection_time is not None:
-                    det = self.sim_time - self.sinkhole_injection_time
+                if node.is_sinkhole and nid in self.sinkhole_injected_at:
+                    det = self.sim_time - self.sinkhole_injected_at[nid]
                     self.ids_detection_s.append(det)
                 kind = "true positive" if node.is_sinkhole else "FALSE POSITIVE"
                 msg = (f"{nid} quarantined: CUSUM={self.cusum[nid]:.2f} (reputation {rep_score[nid]:.2f}, "
@@ -1008,7 +1010,7 @@ class MeshSimulationEngine:
             n.trust.clear()
         self.cusum.clear()
         self.trust_events.clear()
-        self.sinkhole_injection_time = None
+        self.sinkhole_injected_at.clear()
         self.set_narrative("Quarantines cleared and trust counters reset.")
         self.log_event("SYSTEM", "Cleared quarantines and trust state.")
 

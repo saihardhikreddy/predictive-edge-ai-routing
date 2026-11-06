@@ -98,6 +98,18 @@ class TestSecurity(unittest.TestCase):
         self.assertFalse(math.isnan(ids["detection_s"]))
         self.assertEqual(ids["false_positives"], 0)
 
+    def test_detection_time_is_measured_per_sinkhole(self):
+        e = MeshSimulationEngine(node_count=16, seed=0)
+        run(e, 30)
+        first = e.inject_sinkhole()
+        t_first = e.sim_time
+        run(e, 20)
+        self.assertEqual(e.inject_sinkhole(first), first)  # a repeat click changes nothing
+        self.assertEqual(e.sinkhole_injected_at[first], t_first)
+        second = e.inject_sinkhole()
+        self.assertNotEqual(second, first)
+        self.assertEqual(e.sinkhole_injected_at, {first: t_first, second: e.sim_time})
+
     def test_no_attack_no_quarantine(self):
         e = MeshSimulationEngine(node_count=16, seed=7)
         run(e, 150)
