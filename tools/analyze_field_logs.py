@@ -61,6 +61,24 @@ def fmt(xs, unit=""):
     return f"{m:.1f}{unit}" + (f" (median {st.median(xs):.1f}{unit})" if len(xs) > 2 else "")
 
 
+def sinkhole_starts(rows):
+    """node -> every time (ms) its sinkhole mode was switched on, oldest first."""
+    starts = defaultdict(list)
+    for r in rows:
+        if r["event"] == "SINKHOLE_MODE" and r["value"] == "true":
+            starts[r["node"]].append(r["ts"])
+    return dict(starts)
+
+
+def attack_age_s(starts, node, ts):
+    """Seconds since node's latest sinkhole switch-on at or before ts; None if it hadn't attacked yet.
+    Only the start that came before the quarantine counts: with the mode toggled on, off and on
+    again, measuring from the last start gave negative delays, and a quarantine before any attack
+    was counted as a true positive."""
+    before = [t for t in starts.get(node, []) if t <= ts]
+    return (ts - before[-1]) / 1000 if before else None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("paths", nargs="+")
@@ -143,18 +161,19 @@ def main():
         if bs:
             print(f"- {nick.get(n, n)}: {bs[0]}% → {bs[-1]}% (Δ {bs[0] - bs[-1]} pts)")
 
-    sink_on = {r["node"]: r["ts"] for r in rows if r["event"] == "SINKHOLE_MODE" and r["value"] == "true"}
+    sink_on = sinkhole_starts(rows)
     drops = [r for r in rows if r["event"] == "SINK_DROP"]
     quar = [r for r in rows if r["event"] == "QUARANTINE"]
     if sink_on or drops or quar:
         print("\n## Sinkhole\n")
-        for n, ts in sink_on.items():
-            print(f"- {nick.get(n, n)} switched sinkhole mode on at {datetime.fromtimestamp(ts / 1000):%H:%M:%S}")
+        for n, starts in sink_on.items():
+            for ts in starts:
+                print(f"- {nick.get(n, n)} switched sinkhole mode on at {datetime.fromtimestamp(ts / 1000):%H:%M:%S}")
         print(f"- Packets swallowed: {len(drops)}")
         for q in quar:
             target = q["peer"]
-            dt = (q["ts"] - sink_on[target]) / 1000 if target in sink_on else None
-            kind = "true positive" if target in sink_on else "FALSE POSITIVE"
+            dt = attack_age_s(sink_on, target, q["ts"])
+            kind = "true positive" if dt is not None else "FALSE POSITIVE"
             when = f", {dt:.0f}s after the attack started" if dt is not None else ""
             print(f"- {nick.get(q['node'], q['node'])} quarantined {nick.get(target, target)} ({kind}{when})")
 

@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 import analyze_field_logs as afl  # noqa: E402
@@ -49,6 +50,34 @@ class AnalyzeFieldLogsTests(unittest.TestCase):
         self.assertEqual(afl.fmt([None, None]), "–")
         self.assertEqual(afl.fmt([2.0, 4.0], " ms"), "3.0 ms")
         self.assertEqual(afl.fmt([1.0, 2.0, 9.0]), "4.0 (median 2.0)")
+
+    def test_quarantine_is_timed_from_the_attack_it_followed(self):
+        p = self._write("d.csv", "".join([
+            "1000,S,SINKHOLE_MODE,,,,,,,,,true,\n",
+            "5000,S,SINKHOLE_MODE,,,,,,,,,false,\n",
+            "9000,S,SINKHOLE_MODE,,,,,,,,,true,\n",
+        ]))
+        starts = afl.sinkhole_starts(afl.load([p]))
+        self.assertEqual(starts, {"S": [1000, 9000]})
+        self.assertEqual(afl.attack_age_s(starts, "S", 3000), 2.0)   # during the first attack
+        self.assertEqual(afl.attack_age_s(starts, "S", 12000), 3.0)  # during the second
+        self.assertIsNone(afl.attack_age_s(starts, "S", 500))        # before any attack
+        self.assertIsNone(afl.attack_age_s(starts, "B", 12000))      # never attacked
+
+    def test_summary_flags_a_quarantine_before_the_attack(self):
+        import contextlib
+        import io
+        p = self._write("e.csv", "".join([
+            "500,A,QUARANTINE,,,,,S,,,,,\n",
+            "1000,S,SINKHOLE_MODE,,,,,,,,,true,\n",
+            "4000,A,QUARANTINE,,,,,S,,,,,\n",
+        ]))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), unittest.mock.patch("sys.argv", ["x", p]):
+            afl.main()
+        lines = [ln for ln in out.getvalue().splitlines() if "quarantined" in ln]
+        self.assertEqual(lines, ["- A quarantined S (FALSE POSITIVE)",
+                                 "- A quarantined S (true positive, 3s after the attack started)"])
 
 
 if __name__ == "__main__":
