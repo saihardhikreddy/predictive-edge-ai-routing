@@ -10,6 +10,7 @@ Single-entry executable server hosting:
 import asyncio
 import http.server
 import json
+import math
 import os
 import random
 import socketserver
@@ -77,6 +78,9 @@ class DigitalTwinServer:
     async def handle_client_action(self, message: str):
         try:
             data = json.loads(message)
+            if not isinstance(data, dict):
+                print(f"[ACTION_WARN] Expected a JSON object, got {type(data).__name__}")
+                return
             action = data.get("action")
 
             if action == "toggle_pause":
@@ -117,14 +121,19 @@ class DigitalTwinServer:
                 self.engine.log_event("MODE", f"Protocol mode set to {mode}")
 
             elif action == "run_scenario":
-                sc_id = data.get("scenario_id", 1)
+                # The engine compares the id with ==, so "2" (a string) used to run nothing.
+                try:
+                    sc_id = int(data.get("scenario_id", 1))
+                except (TypeError, ValueError):
+                    print(f"[ACTION_WARN] Bad scenario id: {data.get('scenario_id')!r}")
+                    return
                 self.engine.run_scenario(sc_id)
 
             elif action == "trigger_chat":
                 node_keys = list(self.engine.nodes.keys())
                 if len(node_keys) >= 2:
                     s, d = random.sample(node_keys, 2)
-                    is_sos = data.get("is_emergency", False)
+                    is_sos = data.get("is_emergency", False) is True  # "false" is a truthy string
                     self.engine.trigger_message(s, d, is_emergency=is_sos)
 
             elif action == "reset_topology":
@@ -144,7 +153,10 @@ class DigitalTwinServer:
                 self.engine.log_event("CONTROL", f"Triage {state}")
 
             elif action == "set_speed":
-                self.engine.simulation_speed = max(0.25, min(8.0, float(data.get("speed", 1.0))))
+                speed = float(data.get("speed", 1.0))
+                if math.isnan(speed):  # min/max with NaN quietly gave 8x
+                    raise ValueError("speed is NaN")
+                self.engine.simulation_speed = max(0.25, min(8.0, speed))
                 self.engine.log_event("CONTROL", f"Speed x{self.engine.simulation_speed:g}")
 
             else:
