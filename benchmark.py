@@ -155,11 +155,27 @@ def ms(xs: List[float]) -> str:
     return f"{m:.2f} ± {sd:.2f}"
 
 
+def column_order(rows):
+    """Every key that appears in any row, in the order first seen.
+
+    The columns used to be sorted out of a set, with every key missing from the first row
+    tied at the end. Set order changes from run to run with Python's string hashing, so
+    those columns came out shuffled and two identical runs wrote different runs.csv files."""
+    return list(dict.fromkeys(k for r in rows for k in r))
+
+
+def positive_int(text):
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {text}")
+    return value
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--out", default="results")
-    ap.add_argument("--workers", type=int, default=None,
+    ap.add_argument("--workers", type=positive_int, default=None,
                     help="parallel processes (default: one per CPU core)")
     args = ap.parse_args()
 
@@ -190,7 +206,7 @@ def main():
     with ProcessPoolExecutor(max_workers=args.workers) as ex:
         rows = list(ex.map(one_run, jobs))
 
-    keys = sorted({k for r in rows for k in r}, key=lambda k: list(rows[0]).index(k) if k in rows[0] else 99)
+    keys = column_order(rows)
     with open(os.path.join(args.out, "runs.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=keys)
         w.writeheader()
