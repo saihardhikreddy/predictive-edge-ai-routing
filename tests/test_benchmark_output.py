@@ -37,6 +37,17 @@ class ColumnOrderTest(unittest.TestCase):
             with self.assertRaises(argparse.ArgumentTypeError):
                 benchmark.positive_int(bad)
 
+    def test_tools_refuse_zero_workers_before_running(self):
+        # They used to accept it, print "Running N simulations" and then crash in
+        # ProcessPoolExecutor with a traceback.
+        for tool in ("dtn_baselines_benchmark.py", "link_prediction_benchmark.py", "long_range_benchmark.py"):
+            with self.subTest(tool=tool):
+                r = subprocess.run([sys.executable, os.path.join("tools", tool), "--quick", "--workers", "0"],
+                                   cwd=ROOT, capture_output=True, text=True, timeout=60)
+                self.assertEqual(r.returncode, 2, r.stderr)
+                self.assertIn("must be at least 1", r.stderr)
+                self.assertNotIn("Running", r.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

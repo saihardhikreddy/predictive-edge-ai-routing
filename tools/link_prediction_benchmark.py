@@ -16,7 +16,7 @@ import sys
 from concurrent.futures import ProcessPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from benchmark import one_run  # noqa: E402
+from benchmark import one_run, positive_int  # noqa: E402
 from simulation.link_predictor import calibration, metrics  # noqa: E402
 
 MOB_A = [1, 2, 4, 8]
@@ -28,7 +28,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--out", default="results")
-    ap.add_argument("--workers", type=int, default=None)
+    ap.add_argument("--workers", type=positive_int, default=None,
+                    help="parallel processes (default: one per CPU core)")
     a = ap.parse_args()
     seeds = list(range(2 if a.quick else 6))
     dur = 120 if a.quick else 300
