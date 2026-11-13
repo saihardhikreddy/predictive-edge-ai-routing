@@ -34,6 +34,21 @@ class AnalyzeFieldLogsTests(unittest.TestCase):
         rows = afl.load([p])
         self.assertEqual([r["ts"] for r in rows], [1000, 2000])
 
+    def test_log_resaved_by_excel_with_a_byte_order_mark_still_loads(self):
+        path = os.path.join(self.tmp.name, "excel.csv")
+        with open(path, "w", encoding="utf-8-sig") as fh:  # writes the BOM first
+            fh.write(HEADER + "1000,A,SEND,MARL,m1,A,B,,,,,,90\n")
+        rows = afl.load([path])
+        self.assertEqual([r["ts"] for r in rows], [1000])
+
+    def test_a_file_with_no_usable_rows_is_reported(self):
+        path = os.path.join(self.tmp.name, "other.csv")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("time,who\n1,A\n")
+        with unittest.mock.patch("sys.stderr") as err:
+            self.assertEqual(afl.load([path]), [])
+        self.assertIn("no usable rows", "".join(c.args[0] for c in err.write.call_args_list))
+
     def test_missing_columns_become_empty_strings(self):
         p = self._write("c.csv", "1000,A,SEND,,,,,,,,,,\n")
         r = afl.load([p])[0]

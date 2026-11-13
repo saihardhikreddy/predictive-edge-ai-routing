@@ -21,6 +21,7 @@ import csv
 import glob
 import os
 import statistics as st
+import sys
 from collections import defaultdict
 from datetime import datetime
 
@@ -30,7 +31,10 @@ def load(paths):
     for p in paths:
         files = glob.glob(os.path.join(p, "*.csv")) if os.path.isdir(p) else [p]
         for f in files:
-            with open(f, newline="", encoding="utf-8") as fh:
+            # utf-8-sig: a log opened and re-saved in Excel starts with a byte-order mark, which
+            # glued itself to the first header ("\ufeffts_ms"), so every row was skipped in silence.
+            kept = 0
+            with open(f, newline="", encoding="utf-8-sig") as fh:
                 for r in csv.DictReader(fh):
                     try:
                         r["ts"] = int(r["ts_ms"])
@@ -39,6 +43,9 @@ def load(paths):
                     for k in ("node", "event", "mode", "msg", "src", "dst", "peer", "rssi", "hops", "bytes", "value", "battery"):
                         r[k] = r.get(k) or ""
                     rows.append(r)
+                    kept += 1
+            if not kept:
+                print(f"warning: no usable rows in {f} (is it a field log with a ts_ms column?)", file=sys.stderr)
     # the same phone's log may be exported twice: dedupe exact rows
     seen, out = set(), []
     for r in rows:
