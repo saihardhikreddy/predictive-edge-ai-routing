@@ -76,3 +76,58 @@ class ServerInputTypeTests(unittest.IsolatedAsyncioTestCase):
         for value in ("false", 1, True):
             await self._send({"action": "trigger_chat", "is_emergency": value})
         self.assertEqual(seen, [False, False, True])
+
+
+class ServerBindingTests(unittest.IsolatedAsyncioTestCase):
+    """Both servers listen on this machine only unless --host says otherwise."""
+
+    async def _bound_hosts(self, *args):
+        from unittest import mock
+
+        import digital_twin_server as dts
+
+        seen = {}
+
+        class FakeServe:
+            def __init__(self, handler, host, port):
+                seen["ws"] = (host, port)
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+        class FakeThread:
+            def __init__(self, target, args=(), daemon=None):
+                seen["http"] = args
+
+            def start(self):
+                pass
+
+        async def no_loop(self):
+            return None
+
+        with mock.patch.object(dts.websockets, "serve", FakeServe), \
+                mock.patch.object(dts.threading, "Thread", FakeThread), \
+                mock.patch.object(dts.DigitalTwinServer, "broadcast_loop", no_loop), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            await dts.main(*args)
+        return seen, out.getvalue()
+
+    async def test_default_is_this_machine_only(self):
+        import digital_twin_server as dts
+
+        self.assertEqual(dts.parse_args([]).host, "127.0.0.1")
+        seen, out = await self._bound_hosts()
+        self.assertEqual(seen, {"ws": ("127.0.0.1", dts.WS_PORT), "http": ("127.0.0.1",)})
+        self.assertNotIn("anyone who can reach", out)
+
+    async def test_sharing_on_the_network_is_explicit_and_announced(self):
+        import digital_twin_server as dts
+
+        self.assertEqual(dts.parse_args(["--host", "0.0.0.0"]).host, "0.0.0.0")
+        seen, out = await self._bound_hosts("0.0.0.0")
+        self.assertEqual(seen["ws"][0], "0.0.0.0")
+        self.assertEqual(seen["http"], ("0.0.0.0",))
+        self.assertIn("anyone who can reach this machine", out)

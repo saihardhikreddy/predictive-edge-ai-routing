@@ -38,7 +38,7 @@ python -m unittest discover tests     # Python test suite
 python benchmark.py --quick           # ~20 s smoke run
 python benchmark.py                   # full run (~3 min) -> results/
 python benchmark.py --workers 2       # limit CPU use on a laptop
-python digital_twin_server.py         # open http://localhost:8080
+python digital_twin_server.py         # open http://localhost:8080 (add --host 0.0.0.0 to open it from another device)
 ```
 
 Dashboard tips: **Compare Side-by-Side** runs both protocols on every message. Scenario **4** turns the most central phone into a sinkhole and queues 40 messages; the IDS typically quarantines it 30–45 simulated seconds later (about 10 s of wall time at 4× speed). Click a phone to see its Q-values, delivery predictabilities and number of local updates.

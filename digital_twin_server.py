@@ -7,6 +7,7 @@ Single-entry executable server hosting:
 3. Autonomous MARL Routing, Cognitive SLM, and GNN Intrusion Detection Engine.
 """
 
+import argparse
 import asyncio
 import http.server
 import json
@@ -23,6 +24,10 @@ from simulation.mesh_engine import MeshSimulationEngine
 
 HTTP_PORT = 8080
 WS_PORT = 8765
+# This machine only, by default. Both servers used to listen on every interface, so anyone on
+# the same Wi-Fi could open the dashboard and drive the simulation (pause it, inject sinkholes,
+# reset it) over the WebSocket. --host 0.0.0.0 shares it on the network on purpose.
+DEFAULT_HOST = "127.0.0.1"
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 
 
@@ -35,11 +40,11 @@ class CustomHTTPHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-def start_http_server():
+def start_http_server(host=DEFAULT_HOST):
     """Starts background HTTP server for the dashboard."""
     socketserver.TCPServer.allow_reuse_address = True
     try:
-        with socketserver.TCPServer(("", HTTP_PORT), CustomHTTPHandler) as httpd:
+        with socketserver.TCPServer((host, HTTP_PORT), CustomHTTPHandler) as httpd:
             print(
                 f"[HTTP_SERVER] Serving Digital Twin Dashboard on http://localhost:{HTTP_PORT}"
             )
@@ -186,13 +191,23 @@ class DigitalTwinServer:
             await asyncio.sleep(0.033)
 
 
-async def main():
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="Live dashboard for the mesh simulation.")
+    parser.add_argument("--host", default=DEFAULT_HOST,
+                        help="address to listen on (default %(default)s, this machine only; "
+                             "0.0.0.0 to open the dashboard from other devices on the network)")
+    return parser.parse_args(argv)
+
+
+async def main(host=DEFAULT_HOST):
     server = DigitalTwinServer()
 
-    http_thread = threading.Thread(target=start_http_server, daemon=True)
+    http_thread = threading.Thread(target=start_http_server, args=(host,), daemon=True)
     http_thread.start()
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        print(f"[STATUS] Listening on {host}: anyone who can reach this machine can control the simulation.")
 
-    async with websockets.serve(server.register, "0.0.0.0", WS_PORT):
+    async with websockets.serve(server.register, host, WS_PORT):
         print(f"[WEBSOCKET] Serving Digital Twin state on ws://localhost:{WS_PORT}")
         print(f"[STATUS] Cognitive Edge Mesh Server running. Access UI at http://localhost:{HTTP_PORT}")
         await server.broadcast_loop()
@@ -200,6 +215,6 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        asyncio.run(main(parse_args().host))
     except KeyboardInterrupt:
         print("[SERVER] Shutting down Digital Twin Server.")
