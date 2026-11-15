@@ -45,7 +45,7 @@ object Triage {
         if (intent != SOS) {
             return Result(intent, if (intent == URGENT) 2.5 else 1.0, text, raw, raw)
         }
-        val people = Regex("""\b(\d{1,3})\s+(people|persons|students|of us|injured|stranded)""").find(t)?.groupValues?.get(1)
+        val people = Regex("""\b(\d{1,3})\s+(people|persons?|students?|of us|injured|stranded)""").find(t)?.groupValues?.get(1)
         val core = tokens.filter { it != "URGENT" && it != "HELP" }.take(4)
         val wire = "SOS[" + core.joinToString(",") + "]" + (people?.let { "p$it" } ?: "")
         return Result(SOS, 5.0, wire, raw, wire.toByteArray().size)

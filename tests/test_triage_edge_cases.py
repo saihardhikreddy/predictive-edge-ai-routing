@@ -40,6 +40,16 @@ class TriageEdgeCaseTests(unittest.TestCase):
     def test_people_count_is_capped_at_one_byte(self):
         self.assertEqual(triage._people_count("999 people stranded near gate"), 255)
 
+    def test_people_count_reads_a_single_person(self):
+        # "1 person" and "1 student" used to count as nobody, so the SOS went out without
+        # saying anyone was there, while "2 people" was carried.
+        self.assertEqual(triage._people_count("SOS 1 person trapped under the stairs"), 1)
+        self.assertEqual(triage._people_count("1 student unconscious near block B"), 1)
+        self.assertEqual(triage._people_count("12 students stranded"), 12)
+        r = triage.encode("Help! 1 person trapped in the collapsed building, bleeding badly!")
+        self.assertEqual(r.intent, triage.INTENT_SOS)
+        self.assertIn("people=1", triage.decode(r.encoded))
+
     def test_empty_blob_decodes_to_empty_string(self):
         self.assertEqual(triage.decode(b""), "")
 

@@ -126,7 +126,7 @@ def classify(text: str) -> Tuple[str, float, List[str]]:
 
 
 def _people_count(text: str) -> int:
-    m = re.search(r"\b(\d{1,3})\s+(?:people|persons|students|of us|injured|stranded)", text.lower())
+    m = re.search(r"\b(\d{1,3})\s+(?:people|persons?|students?|of us|injured|stranded)", text.lower())
     if m:
         return min(int(m.group(1)), 255)
     return 0
