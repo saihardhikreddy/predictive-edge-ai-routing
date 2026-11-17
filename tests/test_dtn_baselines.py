@@ -22,6 +22,12 @@ class DtnBaselineTest(unittest.TestCase):
     def test_epidemic_costs_more_than_spray(self):
         self.assertGreater(run("Epidemic")["tx_per_delivery"], run("Spray-and-Wait (L=8)")["tx_per_delivery"])
 
+    def test_latency_covers_every_hop(self):
+        # each hop takes at least HOP_TIME_S (0.4 s), so a copy can't cross several hops in one tick
+        for v in ("Epidemic", "PRoPHET (GRTR)"):
+            r = run(v, nodes=32, traffic_interval=1.75)
+            self.assertGreaterEqual(r["latency_s"], 0.4 * r["hops"] - 1e-9, v)
+
     def test_instant_purge_is_cheaper(self):
         self.assertLess(run("Epidemic", vaccine=True)["tx_per_delivery"], run("Epidemic")["tx_per_delivery"])
 

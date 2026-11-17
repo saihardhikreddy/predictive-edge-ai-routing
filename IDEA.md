@@ -116,9 +116,9 @@ Scoring is test-then-train after a 60 s warm-up, so no prediction sees its own f
 the same mobility, radio, traffic and energy model (PRoPHET pays for its vectors, all pay for delivery receipts;
 copies live until TTL, plus an optimistic "instant purge" variant). Results (`results/dtn_baselines.md`, 6 seeds):
 
-- **Spray-and-Wait beats our learned routing at every size**: delivery 0.93–0.96 vs 0.89–0.92, and 2–4x less energy.
+- **Spray-and-Wait beats our learned routing at every size**: delivery 0.93–0.95 vs 0.89–0.92, and 2–4x less energy.
 - **Epidemic and PRoPHET deliver ≈ 1.00 and faster**; at 32 and 48 nodes learned routing uses less energy than both.
-- Multi-copy schemes also shrug off the sinkhole through redundancy (PDR 0.95–1.00 after the attack vs our 0.85).
+- Multi-copy schemes also shrug off the sinkhole through redundancy (PDR 0.94–1.00 after the attack vs our 0.85).
 
 So the honest positioning is: our learned single-copy router is far cheaper than flooding and cheaper than
 Epidemic/PRoPHET in dense meshes, but a well-tuned Spray-and-Wait is a stronger baseline than flooding, and our

@@ -9,7 +9,8 @@ model as MARL and flooding (simulation/mesh_engine.py):
   DIRECT    hold the message until you meet the destination yourself (lower bound on cost)
 
 Same rules for all: one frame per link at a time, taking HOP_TIME_S (x2 on Long Range links);
-success with the same RSSI-based probability; the sender pays transmit energy and the receiver
+success with the same RSSI-based probability; a relay can pass a copy on only once its frame has fully
+arrived, and a delivery counts when the last frame lands; the sender pays transmit energy and the receiver
 receive energy per frame; each offer costs an 8-byte control exchange (summary vector entry);
 copies expire after the same TTL as MARL (x2 for SOS); SOS goes first. A delivery receipt
 walks back along the path (12 B per hop), as in MARL; PRoPHET pays for its predictability vectors
@@ -41,6 +42,7 @@ class _Msg:
 class _Copy:
     tokens: int
     hops: int
+    ready: float = 0.0  # when the frame carrying this copy has finished arriving
 
 
 class DTNRouter:
@@ -69,6 +71,8 @@ class DTNRouter:
 
     def _wants(self, a: str, b: str, mid: str, c: _Copy) -> bool:
         m = self.msgs[mid]
+        if c.ready > self.e.sim_time:
+            return False  # still arriving: a node can't relay a frame it hasn't finished receiving
         if b == m.dst:
             return not m.delivered  # the destination already has it once delivered
         if mid in self.buf.get(b, {}):
@@ -111,7 +115,8 @@ class DTNRouter:
         m = self.msgs[mid]
         coded = link in e.coded
         cx = e.CODED_ENERGY_X if coded else 1.0
-        self.busy_until[link] = e.sim_time + e.HOP_TIME_S * (e.CODED_HOP_TIME_X if coded else 1.0)
+        done = e.sim_time + e.HOP_TIME_S * (e.CODED_HOP_TIME_X if coded else 1.0)
+        self.busy_until[link] = done
         na, nb = e.nodes[a], e.nodes[b]
         # offer/accept (summary vector entry) both ways, then the frame
         self.m["control_tx"] += 1
@@ -132,7 +137,7 @@ class DTNRouter:
         if b == m.dst:
             if not m.delivered:
                 m.delivered = True
-                lat = e.sim_time - m.t0
+                lat = done - m.t0  # the message has arrived once its last frame has
                 self.m["delivered"] += 1
                 self.m["latencies"].append(lat)
                 self.m["hops"].append(c.hops + 1)
@@ -149,6 +154,6 @@ class DTNRouter:
         if self.kind == "SPRAY":
             give = c.tokens // 2
             c.tokens -= give
-            self.buf.setdefault(b, {})[mid] = _Copy(give, c.hops + 1)
+            self.buf.setdefault(b, {})[mid] = _Copy(give, c.hops + 1, done)
         else:
-            self.buf.setdefault(b, {})[mid] = _Copy(1, c.hops + 1)
+            self.buf.setdefault(b, {})[mid] = _Copy(1, c.hops + 1, done)
