@@ -28,6 +28,26 @@ WS_PORT = 8765
 # the same Wi-Fi could open the dashboard and drive the simulation (pause it, inject sinkholes,
 # reset it) over the WebSocket. --host 0.0.0.0 shares it on the network on purpose.
 DEFAULT_HOST = "127.0.0.1"
+LOOPBACK = ("127.0.0.1", "localhost", "::1")
+
+
+def allowed_origins(host=DEFAULT_HOST):
+    """Origins whose pages may open the control WebSocket, or None for no check.
+
+    A browser lets any website open a WebSocket to localhost (there is no CORS for them), so a
+    page in another tab could pause the simulation, inject sinkholes or reset it. Only the
+    dashboard's own page, served on HTTP_PORT, is let in; None in the list admits clients that
+    send no Origin at all (scripts, not browsers). On a non-loopback --host the dashboard is
+    shared on purpose and may be opened under any address, so there is no check.
+    """
+    names = ["localhost", "127.0.0.1", "[::1]"]
+    if host not in LOOPBACK:
+        if host in ("0.0.0.0", "::", ""):
+            return None
+        names.append(f"[{host}]" if ":" in host else host)
+    return [f"http://{n}:{HTTP_PORT}" for n in names] + [None]
+
+
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 
 
@@ -204,10 +224,10 @@ async def main(host=DEFAULT_HOST):
 
     http_thread = threading.Thread(target=start_http_server, args=(host,), daemon=True)
     http_thread.start()
-    if host not in ("127.0.0.1", "localhost", "::1"):
+    if host not in LOOPBACK:
         print(f"[STATUS] Listening on {host}: anyone who can reach this machine can control the simulation.")
 
-    async with websockets.serve(server.register, host, WS_PORT):
+    async with websockets.serve(server.register, host, WS_PORT, origins=allowed_origins(host)):
         print(f"[WEBSOCKET] Serving Digital Twin state on ws://localhost:{WS_PORT}")
         print(f"[STATUS] Cognitive Edge Mesh Server running. Access UI at http://localhost:{HTTP_PORT}")
         await server.broadcast_loop()

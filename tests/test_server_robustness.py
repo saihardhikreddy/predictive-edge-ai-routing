@@ -89,8 +89,9 @@ class ServerBindingTests(unittest.IsolatedAsyncioTestCase):
         seen = {}
 
         class FakeServe:
-            def __init__(self, handler, host, port):
+            def __init__(self, handler, host, port, origins=None):
                 seen["ws"] = (host, port)
+                seen["origins"] = origins
 
             async def __aenter__(self):
                 return self
@@ -120,7 +121,9 @@ class ServerBindingTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(dts.parse_args([]).host, "127.0.0.1")
         seen, out = await self._bound_hosts()
-        self.assertEqual(seen, {"ws": ("127.0.0.1", dts.WS_PORT), "http": ("127.0.0.1",)})
+        self.assertEqual(seen["ws"], ("127.0.0.1", dts.WS_PORT))
+        self.assertEqual(seen["http"], ("127.0.0.1",))
+        self.assertIn(f"http://localhost:{dts.HTTP_PORT}", seen["origins"])
         self.assertNotIn("anyone who can reach", out)
 
     async def test_sharing_on_the_network_is_explicit_and_announced(self):
@@ -131,3 +134,24 @@ class ServerBindingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(seen["ws"][0], "0.0.0.0")
         self.assertEqual(seen["http"], ("0.0.0.0",))
         self.assertIn("anyone who can reach this machine", out)
+
+    async def test_other_websites_cannot_open_the_control_socket(self):
+        import websockets
+
+        import digital_twin_server as dts
+
+        async def echo(ws):
+            await ws.send("hello")
+
+        async with websockets.serve(echo, "127.0.0.1", 0, origins=dts.allowed_origins("127.0.0.1")) as srv:
+            port = srv.sockets[0].getsockname()[1]
+            url = f"ws://127.0.0.1:{port}"
+            for origin in (f"http://localhost:{dts.HTTP_PORT}", f"http://127.0.0.1:{dts.HTTP_PORT}", None):
+                async with websockets.connect(url, origin=origin) as ws:   # the dashboard, or a script
+                    self.assertEqual(await ws.recv(), "hello")
+            for origin in ("https://evil.example", "null", "http://localhost:9999"):
+                with self.assertRaises(websockets.exceptions.InvalidHandshake, msg=origin):  # HTTP 403
+                    async with websockets.connect(url, origin=origin) as ws:
+                        await ws.recv()
+        self.assertIsNone(dts.allowed_origins("0.0.0.0"))                   # shared on purpose
+        self.assertIn(f"http://192.168.1.5:{dts.HTTP_PORT}", dts.allowed_origins("192.168.1.5"))

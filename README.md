@@ -41,6 +41,8 @@ python benchmark.py --workers 2       # limit CPU use on a laptop
 python digital_twin_server.py         # open http://localhost:8080 (add --host 0.0.0.0 to open it from another device)
 ```
 
+The dashboard's control WebSocket only accepts its own page (http://localhost:8080 or 127.0.0.1:8080), so another website open in the browser can't drive the simulation. With `--host 0.0.0.0` that check is off, since the page may then be opened under any address.
+
 Dashboard tips: **Compare Side-by-Side** runs both protocols on every message. Scenario **4** turns the most central phone into a sinkhole and queues 40 messages; the IDS typically quarantines it 30–45 simulated seconds later (about 10 s of wall time at 4× speed). Click a phone to see its Q-values, delivery predictabilities and number of local updates.
 
 ## Phone testbed (APK)
