@@ -168,10 +168,13 @@ def decode(blob: bytes) -> str:
     if head == 0xFF:
         return blob[1:].decode("utf-8")
     if head & 0x80:
-        intent = INTENT_FROM_CODE[head & 0x7F]
-        n = blob[1]
+        intent = INTENT_FROM_CODE.get(head & 0x7F, INTENT_SOS)
+        # A semantic SOS packet is [flags, n, n token ids, people]. Radio drops bytes, so a
+        # received packet can be short: read what survived instead of raising IndexError, so a
+        # partial alert ("EMERGENCY_SOS: FIRE") still reaches a human.
+        n = blob[1] if len(blob) > 1 else 0
         toks = [TOKEN_NAMES.get(b, "?") for b in blob[2 : 2 + n]]
-        people = blob[2 + n]
+        people = blob[2 + n] if len(blob) > 2 + n else 0
         s = f"{intent}: " + ", ".join(toks)
         if people:
             s += f" | people={people}"

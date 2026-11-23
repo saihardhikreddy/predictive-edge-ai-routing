@@ -53,6 +53,17 @@ class TriageEdgeCaseTests(unittest.TestCase):
     def test_empty_blob_decodes_to_empty_string(self):
         self.assertEqual(triage.decode(b""), "")
 
+    def test_truncated_sos_packet_decodes_without_crashing(self):
+        # The mesh radio drops bytes; a clipped SOS packet must still yield a partial alert,
+        # not raise IndexError.
+        full = triage.encode("SOS fire, 3 people trapped and bleeding").encoded
+        self.assertIn("people=3", triage.decode(full))
+        for cut in range(1, len(full)):
+            out = triage.decode(full[:cut])
+            self.assertTrue(out.startswith("EMERGENCY_SOS:"), f"len {cut}: {out!r}")
+        # A header that claims more tokens than survived is clamped to what is there.
+        self.assertEqual(triage.decode(bytes([0x82, 9, 1])), "EMERGENCY_SOS: SOS")
+
 
 if __name__ == "__main__":
     unittest.main()
