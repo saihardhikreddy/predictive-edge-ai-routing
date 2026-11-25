@@ -60,6 +60,15 @@ def parse_time(s):
     return int(datetime.fromisoformat(s).timestamp() * 1000) if s else None
 
 
+def cli_time(s):
+    """--since/--until: a clean usage error for a time that isn't ISO format ("14:00" alone, or
+    "10/10/2026"), instead of a ValueError traceback from deep inside main()."""
+    try:
+        return parse_time(s)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"'{s}' is not a date and time like 2026-10-10T14:00") from None
+
+
 def fmt(xs, unit=""):
     xs = [x for x in xs if x is not None]
     if not xs:
@@ -89,11 +98,13 @@ def attack_age_s(starts, node, ts):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("paths", nargs="+")
-    ap.add_argument("--since")
-    ap.add_argument("--until")
+    ap.add_argument("--since", type=cli_time)
+    ap.add_argument("--until", type=cli_time)
     a = ap.parse_args()
+    lo, hi = a.since, a.until
+    if lo is not None and hi is not None and lo > hi:
+        ap.error("--since is later than --until, so no rows can be in range")
     rows = load(a.paths)
-    lo, hi = parse_time(a.since), parse_time(a.until)
     rows = [r for r in rows if (lo is None or r["ts"] >= lo) and (hi is None or r["ts"] <= hi)]
     if not rows:
         print("No rows in range.")

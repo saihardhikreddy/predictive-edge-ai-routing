@@ -60,6 +60,21 @@ class AnalyzeFieldLogsTests(unittest.TestCase):
         self.assertIsNone(afl.parse_time(""))
         self.assertIsInstance(afl.parse_time("2026-10-10T14:00"), int)
 
+    def test_bad_since_or_until_is_a_usage_error_not_a_traceback(self):
+        import contextlib
+        import io
+        p = self._write("f.csv", "1000,A,SEND,MARL,m1,A,B,,,,,,90\n")
+        for args in (["--since", "14:00"], ["--until", "10/10/2026"],
+                     ["--since", "2026-10-10T15:00", "--until", "2026-10-10T14:00"]):
+            err = io.StringIO()
+            with self.subTest(args=args), contextlib.redirect_stderr(err), \
+                    unittest.mock.patch("sys.argv", ["x", p, *args]):
+                with self.assertRaises(SystemExit) as cm:
+                    afl.main()
+                self.assertEqual(cm.exception.code, 2)
+                self.assertNotIn("Traceback", err.getvalue())
+        self.assertEqual(afl.cli_time("2026-10-10T14:00"), afl.parse_time("2026-10-10T14:00"))
+
     def test_fmt(self):
         self.assertEqual(afl.fmt([]), "–")
         self.assertEqual(afl.fmt([None, None]), "–")
